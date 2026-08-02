@@ -1,0 +1,27 @@
+{
+  "name": "@mosp/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prebuild": "npm run build --workspace @mosp/shared && npm run build --workspace @mosp/auth && npm run build --workspace @mosp/storage-core && npm run build --workspace @mosp/provider-s3 && npm run build --workspace @mosp/db",
+    "dev": "tsx watch src/server.ts",
+    "predev": "npm run build --workspace @mosp/shared && npm run build --workspace @mosp/auth && npm run build --workspace @mosp/storage-core && npm run build --workspace @mosp/provider-s3 && npm run build --workspace @mosp/db",
+    "prestart": "npm run build --workspace @mosp/shared && npm run build --workspace @mosp/auth && npm run build --workspace @mosp/storage-core && npm run build --workspace @mosp/provider-s3 && npm run build --workspace @mosp/db",
+    "pretest": "npm run build --workspace @mosp/shared && npm run build --workspace @mosp/auth && npm run build --workspace @mosp/storage-core && npm run build --workspace @mosp/provider-s3 && npm run build --workspace @mosp/db",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mosp/auth": "*",
+    "@mosp/db": "*",
+    "@mosp/provider-s3": "*",
+    "@mosp/storage-core": "*",
+    "cookie": "2.0.1",
+    "express": "5.2.1",
+    "pino": "10.3.1",
+    "redis": "^5.8.2"
+  }
+}

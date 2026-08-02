@@ -1,0 +1,57 @@
+{
+  "name": "multi-object-storage-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.8.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "db:format": "npm run db:format --workspace @mosp/db",
+    "db:generate": "npm run db:generate --workspace @mosp/db",
+    "db:migrate": "npm run db:migrate --workspace @mosp/db",
+    "db:deploy": "npm exec --workspace @mosp/db prisma migrate deploy",
+    "db:test": "node scripts/verify-database.mjs",
+    "db:backup:verify": "node scripts/db-backup-verify.mjs",
+    "db:restore:verify": "node scripts/db-restore-verify.mjs",
+    "provider:key-rotation": "npm run build --workspace @mosp/db && npm run build --workspace @mosp/storage-core && node scripts/provider-credential-key-rotation.mjs",
+    "db:validate": "npm run db:validate --workspace @mosp/db",
+    "openapi:check": "node scripts/verify-openapi-routes.mjs",
+    "provider:contract-test": "npm run build --workspace @mosp/provider-s3 && node scripts/provider-contract-test.mjs",
+    "e2e:minio": "node scripts/api-minio-smoke-test.mjs",
+    "capacity:proxy": "node scripts/api-proxy-capacity-test.mjs",
+    "soak:proxy": "node scripts/api-proxy-capacity-test.mjs --duration-seconds 60 --max-failures 0",
+    "readiness:probe": "node scripts/readiness-probe.mjs",
+    "redis:probe": "node scripts/redis-resilience-check.mjs",
+    "production:config:check": "node scripts/production-config-check.mjs",
+    "bootstrap:local": "node scripts/bootstrap-local.mjs",
+    "prebootstrap:local": "npm run build --workspace @mosp/shared && npm run build --workspace @mosp/auth && npm run build --workspace @mosp/db",
+    "dev:api": "npm run dev --workspace @mosp/api",
+    "dev:web": "npm run dev --workspace @mosp/web",
+    "infra:down": "docker compose down",
+    "infra:up": "docker compose up -d redis",
+    "secrets:init": "node scripts/init-local-secrets.mjs",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "quality:check": "npm run typecheck && npm test && npm run db:validate && npm run db:generate && npm run openapi:check && npm audit --audit-level=high"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "@types/pg": "8.20.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@types/supertest": "6.0.3",
+    "prisma": "7.9.1",
+    "supertest": "7.2.2",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

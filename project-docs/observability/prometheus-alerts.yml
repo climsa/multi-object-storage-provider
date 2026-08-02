@@ -1,0 +1,85 @@
+# Prometheus rules for the API's aggregate, tenant-safe metrics.
+# Scrape /metrics from a private monitoring network with MOSP_METRICS_TOKEN.
+# Adjust the `for` windows to the deployment's scrape interval and SLO.
+groups:
+  - name: mosp-api-availability
+    rules:
+      - alert: MospApiTargetDown
+        expr: up{job="mosp-api"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: MOSP API target is not being scraped
+          description: The API metrics target has been unavailable for five minutes.
+
+      - alert: MospApiHigh5xxRate
+        expr: |
+          sum(rate(mosp_http_requests_total{job="mosp-api",status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(mosp_http_requests_total{job="mosp-api"}[5m])), 1)
+          > 0.02
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: MOSP API 5xx rate is above 2%
+          description: Investigate database, Redis, provider, or deployment errors.
+
+      - alert: MospApiReadinessDegraded
+        expr: |
+          sum(rate(mosp_http_requests_total{job="mosp-api",route="/readyz",status="503"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: MOSP API readiness is degraded
+          description: One or more replicas are reporting unavailable readiness.
+
+  - name: mosp-storage-gateway
+    rules:
+      - alert: MospStorageOverloaded
+        expr: increase(mosp_storage_overloaded_total{job="mosp-api"}[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: MOSP storage gateway is rejecting saturated work
+          description: Review in-flight capacity, provider latency, and reverse-proxy limits.
+
+      - alert: MospProxyUploadFailures
+        expr: |
+          increase(mosp_proxy_upload_failures_total{job="mosp-api"}[10m])
+          /
+          clamp_min(increase(mosp_proxy_upload_attempts_total{job="mosp-api"}[10m]), 1)
+          > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Proxied upload failure rate is above 1%
+          description: Compare provider errors, timeout limits, and request-body limits.
+
+      - alert: MospProxyDownloadFailures
+        expr: |
+          increase(mosp_proxy_download_failures_total{job="mosp-api"}[10m])
+          /
+          clamp_min(increase(mosp_proxy_download_attempts_total{job="mosp-api"}[10m]), 1)
+          > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Proxied download failure rate is above 1%
+          description: Compare provider errors, client disconnects, and timeout limits.
+
+      - alert: MospApi503Responses
+        expr: |
+          increase(mosp_http_requests_total{job="mosp-api",status="503"}[10m]) > 0
+          and on() sum(rate(mosp_http_requests_total{job="mosp-api"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: MOSP is returning 503 responses
+          description: Check readiness, Redis/database dependencies, and storage backpressure before returning traffic.

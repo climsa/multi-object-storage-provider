@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+coverage/
+
+# Generated Prisma client
+packages/db/generated/
+
+# Local runtime secrets. Only the README is tracked.
+.local/secrets/*
+!.local/secrets/README.md
+.local/minio-data/
+
+# Local tooling
+.DS_Store
+*.log
+*.tsbuildinfo

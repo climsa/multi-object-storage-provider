@@ -1,0 +1,47 @@
+{
+  "title": "MOSP Production Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "tags": ["mosp", "production"],
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum by (status) (rate(mosp_http_requests_total{job=\"mosp-api\"}[5m]))", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Storage in-flight and overloads",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "mosp_storage_in_flight{job=\"mosp-api\"}", "legendFormat": "in-flight" },
+        { "expr": "rate(mosp_storage_overloaded_total{job=\"mosp-api\"}[5m])", "legendFormat": "overload/s" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Proxy transfer failures",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(mosp_proxy_upload_failures_total{job=\"mosp-api\"}[5m])", "legendFormat": "upload failures/s" },
+        { "expr": "rate(mosp_proxy_download_failures_total{job=\"mosp-api\"}[5m])", "legendFormat": "download failures/s" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Proxy bytes delivered",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "rate(mosp_proxy_upload_bytes_total{job=\"mosp-api\"}[5m])", "legendFormat": "upload bytes/s" },
+        { "expr": "rate(mosp_proxy_download_bytes_total{job=\"mosp-api\"}[5m])", "legendFormat": "download bytes/s" }
+      ]
+    }
+  ]
+}

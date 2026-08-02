@@ -1,0 +1,21 @@
+{
+  "name": "@mosp/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "predev": "npm run build --workspace @mosp/db",
+    "prestart": "npm run build --workspace @mosp/db",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mosp/db": "*",
+    "@mosp/provider-s3": "*",
+    "@mosp/storage-core": "*",
+    "pino": "10.3.1"
+  }
+}

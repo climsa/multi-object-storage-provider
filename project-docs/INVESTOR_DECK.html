@@ -1,0 +1,1693 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>Investor Deck — Multi-Provider Object Storage SaaS</title>
+  <style>
+    :root {
+      --ink: #f4f7fb;
+      --muted: #a9b7c9;
+      --dim: #73839a;
+      --bg: #07111f;
+      --bg-deep: #040a12;
+      --panel: #0d1b2d;
+      --panel-2: #122238;
+      --line: rgba(255,255,255,.14);
+      --cyan: #58d6c7;
+      --cyan-2: #21a99c;
+      --orange: #ffb25b;
+      --red: #ff786f;
+      --green: #84dfa6;
+      --blue: #78a8ff;
+      --shadow: 0 30px 80px rgba(0,0,0,.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at 80% 10%, rgba(88,214,199,.12), transparent 27%),
+        radial-gradient(circle at 10% 85%, rgba(120,168,255,.10), transparent 31%),
+        var(--bg-deep);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    button, a { font: inherit; }
+
+    .deck-shell {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+
+    .deck {
+      position: relative;
+      width: min(100vw, calc(100vh * 16 / 9));
+      height: min(100vh, calc(100vw * 9 / 16));
+      background: var(--bg);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .deck::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px);
+      background-size: 5vw 5vw;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.75), transparent 90%);
+      z-index: 0;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      padding: clamp(32px, 4vw, 68px) clamp(40px, 5.2vw, 88px);
+      overflow: hidden;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(88,214,199,.08), transparent 28%),
+        linear-gradient(145deg, rgba(255,255,255,.015), transparent 38%);
+    }
+
+    .slide.active {
+      display: flex;
+      animation: enter .28s ease-out;
+    }
+
+    @keyframes enter {
+      from { opacity: .25; transform: translateX(16px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .slide::after {
+      content: "";
+      position: absolute;
+      width: 26vw;
+      height: 26vw;
+      right: -12vw;
+      bottom: -16vw;
+      border: 1px solid rgba(88,214,199,.18);
+      border-radius: 50%;
+      box-shadow:
+        0 0 0 3vw rgba(88,214,199,.018),
+        0 0 0 7vw rgba(88,214,199,.014);
+      z-index: -1;
+    }
+
+    .slide.warm::after {
+      border-color: rgba(255,178,91,.2);
+      box-shadow:
+        0 0 0 3vw rgba(255,178,91,.018),
+        0 0 0 7vw rgba(255,178,91,.014);
+    }
+
+    .slide.danger::after {
+      border-color: rgba(255,120,111,.22);
+      box-shadow:
+        0 0 0 3vw rgba(255,120,111,.02),
+        0 0 0 7vw rgba(255,120,111,.014);
+    }
+
+    .kicker {
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: .15em;
+      font-weight: 750;
+      font-size: clamp(12px, 1.05vw, 17px);
+      margin-bottom: clamp(12px, 1.5vw, 22px);
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      max-width: 1050px;
+      font-size: clamp(50px, 5.25vw, 84px);
+      line-height: .98;
+      letter-spacing: -.048em;
+      margin-bottom: clamp(24px, 3vw, 46px);
+      text-wrap: balance;
+    }
+
+    h2 {
+      max-width: 1200px;
+      font-size: clamp(36px, 3.55vw, 57px);
+      line-height: 1.04;
+      letter-spacing: -.035em;
+      margin-bottom: clamp(22px, 2.8vw, 42px);
+      text-wrap: balance;
+    }
+
+    h3 {
+      font-size: clamp(22px, 2vw, 32px);
+      line-height: 1.1;
+      letter-spacing: -.02em;
+      margin-bottom: .65em;
+    }
+
+    p, li, td, th {
+      font-size: clamp(15px, 1.42vw, 23px);
+      line-height: 1.42;
+    }
+
+    p { color: var(--muted); }
+
+    .lead {
+      max-width: 930px;
+      font-size: clamp(21px, 2.15vw, 34px);
+      line-height: 1.32;
+      color: #d9e4f0;
+    }
+
+    .small {
+      font-size: clamp(12px, 1.05vw, 17px);
+      line-height: 1.38;
+      color: var(--dim);
+    }
+
+    .tiny {
+      font-size: clamp(10px, .88vw, 14px);
+      color: var(--dim);
+    }
+
+    .muted { color: var(--muted); }
+    .cyan { color: var(--cyan); }
+    .orange { color: var(--orange); }
+    .red { color: var(--red); }
+    .green { color: var(--green); }
+    .blue { color: var(--blue); }
+    .white { color: var(--ink); }
+
+    .grow {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .center {
+      justify-content: center;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: clamp(30px, 5vw, 84px);
+      align-items: center;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .split.equal { grid-template-columns: 1fr 1fr; }
+    .split.wide-right { grid-template-columns: .8fr 1.2fr; }
+
+    .rule {
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, var(--line), transparent);
+      margin: clamp(16px, 2vw, 30px) 0;
+    }
+
+    .statement {
+      border-left: 5px solid var(--cyan);
+      padding-left: clamp(18px, 2vw, 30px);
+      margin: clamp(14px, 2vw, 28px) 0;
+    }
+
+    .statement.orange-line { border-color: var(--orange); }
+    .statement.red-line { border-color: var(--red); }
+
+    .statement strong {
+      display: block;
+      font-size: clamp(23px, 2.1vw, 34px);
+      line-height: 1.15;
+      margin-bottom: .3em;
+    }
+
+    .statement span {
+      display: block;
+      color: var(--muted);
+      font-size: clamp(14px, 1.28vw, 21px);
+      line-height: 1.4;
+    }
+
+    .big-number {
+      font-size: clamp(58px, 7vw, 112px);
+      line-height: .88;
+      font-weight: 850;
+      letter-spacing: -.06em;
+    }
+
+    .metric-label {
+      margin-top: .65em;
+      color: var(--muted);
+      font-size: clamp(16px, 1.5vw, 24px);
+    }
+
+    .horizontal-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: clamp(22px, 3vw, 50px);
+      margin-top: clamp(22px, 4vw, 60px);
+    }
+
+    .metric {
+      padding-top: clamp(14px, 1.6vw, 26px);
+      border-top: 2px solid var(--line);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: clamp(28px, 3vw, 48px);
+      line-height: 1;
+      letter-spacing: -.04em;
+      margin-bottom: .35em;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: clamp(13px, 1.15vw, 18px);
+      line-height: 1.35;
+    }
+
+    ul.clean {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    ul.clean li {
+      position: relative;
+      padding-left: 1.35em;
+      margin-bottom: .72em;
+      color: #d8e2ed;
+    }
+
+    ul.clean li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: .58em;
+      width: .48em;
+      height: .48em;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 0 4px rgba(88,214,199,.1);
+    }
+
+    ul.clean.risk li::before { background: var(--red); box-shadow: 0 0 0 4px rgba(255,120,111,.1); }
+    ul.clean.money li::before { background: var(--orange); box-shadow: 0 0 0 4px rgba(255,178,91,.1); }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: clamp(8px, 1.2vw, 18px);
+      margin-top: clamp(12px, 2vw, 30px);
+    }
+
+    .arch-node {
+      min-height: clamp(96px, 10vw, 150px);
+      display: grid;
+      align-content: center;
+      padding: clamp(14px, 1.8vw, 26px);
+      border-top: 3px solid var(--cyan);
+      background: linear-gradient(180deg, rgba(18,34,56,.8), rgba(13,27,45,.35));
+    }
+
+    .arch-node.orange-border { border-color: var(--orange); }
+    .arch-node.blue-border { border-color: var(--blue); }
+
+    .arch-node strong {
+      font-size: clamp(18px, 1.75vw, 28px);
+      margin-bottom: .35em;
+    }
+
+    .arch-node span {
+      color: var(--muted);
+      font-size: clamp(12px, 1.05vw, 17px);
+      line-height: 1.35;
+    }
+
+    .arrow {
+      color: var(--dim);
+      font-size: clamp(26px, 3vw, 48px);
+    }
+
+    .flow-note {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(22px, 4vw, 60px);
+      margin-top: clamp(22px, 3vw, 44px);
+    }
+
+    .flow-note > div {
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+    }
+
+    .flow-note strong {
+      font-size: clamp(17px, 1.5vw, 24px);
+    }
+
+    .flow-note p {
+      margin: .4em 0 0;
+      font-size: clamp(13px, 1.12vw, 18px);
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(28px, 4vw, 64px);
+      align-items: stretch;
+      flex: 1;
+    }
+
+    .compare-col {
+      padding-top: clamp(16px, 2vw, 28px);
+      border-top: 4px solid var(--line);
+    }
+
+    .compare-col.good { border-color: var(--cyan); }
+    .compare-col.bad { border-color: var(--red); }
+
+    .compare-col h3 { margin-bottom: 1em; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+      text-align: left;
+      padding: .65em .65em .65em 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    td {
+      padding: .68em .65em .68em 0;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      vertical-align: top;
+      color: #dbe4ee;
+    }
+
+    td strong { color: var(--ink); }
+    .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .pricing td, .pricing th {
+      font-size: clamp(12px, 1.05vw, 17px);
+      padding-top: .75em;
+      padding-bottom: .75em;
+    }
+
+    .pricing td:first-child {
+      color: var(--cyan);
+      font-weight: 750;
+    }
+
+    .cost-stack {
+      display: flex;
+      height: clamp(56px, 6vw, 92px);
+      overflow: hidden;
+      margin: clamp(18px, 2.5vw, 38px) 0;
+    }
+
+    .cost-stack > div {
+      display: grid;
+      place-items: center;
+      color: #07111f;
+      font-weight: 850;
+      font-size: clamp(12px, 1vw, 16px);
+      min-width: 42px;
+    }
+
+    .c1 { background: var(--cyan); }
+    .c2 { background: var(--blue); }
+    .c3 { background: var(--orange); }
+    .c4 { background: var(--green); }
+    .c5 { background: #e0a5ff; }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .75em 2em;
+    }
+
+    .legend-row {
+      display: grid;
+      grid-template-columns: 12px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      font-size: clamp(12px, 1.05vw, 17px);
+      color: var(--muted);
+    }
+
+    .legend-row i {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .legend-row strong { color: var(--ink); }
+
+    .bar-chart {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: clamp(24px, 4vw, 70px);
+      align-items: end;
+      height: clamp(250px, 31vw, 450px);
+      border-bottom: 1px solid var(--line);
+      padding: 0 clamp(12px, 2vw, 30px);
+      margin-top: 10px;
+    }
+
+    .year-bar {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      align-items: end;
+      position: relative;
+    }
+
+    .bars {
+      height: 100%;
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .bar {
+      width: min(52px, 4vw);
+      border-radius: 5px 5px 0 0;
+      position: relative;
+      min-height: 3px;
+    }
+
+    .bar.revenue { background: linear-gradient(to top, var(--cyan-2), var(--cyan)); }
+    .bar.gross { background: linear-gradient(to top, #4776d8, var(--blue)); }
+    .bar.negative {
+      background: repeating-linear-gradient(135deg, rgba(255,120,111,.85), rgba(255,120,111,.85) 8px, rgba(255,120,111,.45) 8px, rgba(255,120,111,.45) 16px);
+    }
+    .bar.positive { background: linear-gradient(to top, #42955e, var(--green)); }
+
+    .bar em {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: -1.65em;
+      color: var(--ink);
+      font-size: clamp(11px, .95vw, 15px);
+      font-style: normal;
+      white-space: nowrap;
+      font-weight: 750;
+    }
+
+    .year-label {
+      text-align: center;
+      padding: .8em 0 0;
+      font-size: clamp(14px, 1.2vw, 19px);
+      color: var(--muted);
+    }
+
+    .scenario-table td, .scenario-table th {
+      font-size: clamp(12px, 1.03vw, 16.5px);
+      padding: .72em .5em;
+    }
+
+    .scenario-table tr.base-row {
+      background: linear-gradient(90deg, rgba(88,214,199,.1), transparent);
+    }
+
+    .risk-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(16px, 2.2vw, 32px) clamp(28px, 4vw, 64px);
+    }
+
+    .risk-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: clamp(12px, 1.3vw, 20px);
+      padding-top: clamp(12px, 1.4vw, 20px);
+      border-top: 1px solid var(--line);
+    }
+
+    .risk-level {
+      width: clamp(44px, 4.2vw, 66px);
+      height: clamp(44px, 4.2vw, 66px);
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 2px solid var(--red);
+      color: var(--red);
+      font-weight: 850;
+      font-size: clamp(12px, 1vw, 16px);
+    }
+
+    .risk-item strong {
+      display: block;
+      font-size: clamp(17px, 1.45vw, 23px);
+      margin-bottom: .25em;
+    }
+
+    .risk-item p {
+      font-size: clamp(12px, 1.05vw, 17px);
+      margin: 0;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      margin-top: clamp(22px, 3.5vw, 54px);
+      position: relative;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      top: 13px;
+      left: 5%;
+      right: 5%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--blue), var(--orange));
+      z-index: -1;
+    }
+
+    .milestone {
+      padding-right: clamp(18px, 2vw, 30px);
+    }
+
+    .milestone .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 6px solid var(--cyan);
+      margin-bottom: 1em;
+    }
+
+    .milestone:nth-child(3) .dot { border-color: var(--blue); }
+    .milestone:nth-child(4) .dot { border-color: var(--orange); }
+
+    .milestone strong {
+      display: block;
+      font-size: clamp(16px, 1.45vw, 23px);
+      margin-bottom: .5em;
+    }
+
+    .milestone p {
+      font-size: clamp(12px, 1vw, 16px);
+      margin: 0;
+    }
+
+    .foot {
+      position: absolute;
+      left: clamp(40px, 5.2vw, 88px);
+      right: clamp(40px, 5.2vw, 88px);
+      bottom: clamp(17px, 1.7vw, 28px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--dim);
+      font-size: clamp(10px, .78vw, 13px);
+      letter-spacing: .02em;
+      z-index: 2;
+    }
+
+    .speaker-notes { display: none; }
+
+    .progress {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      height: 4px;
+      width: 0;
+      background: linear-gradient(90deg, var(--cyan), var(--blue));
+      transition: width .22s ease;
+      z-index: 30;
+    }
+
+    .controls {
+      position: fixed;
+      right: 96px;
+      bottom: 14px;
+      display: flex;
+      gap: 8px;
+      z-index: 40;
+      opacity: .48;
+      transition: opacity .2s;
+    }
+
+    .controls:hover { opacity: 1; }
+
+    .controls button {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(5,13,23,.82);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .notes-panel, .help-panel {
+      position: fixed;
+      z-index: 60;
+      display: none;
+      background: rgba(4,10,18,.96);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .notes-panel {
+      left: 5vw;
+      right: 5vw;
+      bottom: 5vh;
+      max-height: 36vh;
+      padding: 22px 28px;
+      overflow: auto;
+    }
+
+    .help-panel {
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      width: min(560px, 86vw);
+      padding: 28px 32px;
+    }
+
+    .notes-panel.open, .help-panel.open { display: block; }
+
+    .notes-panel h4, .help-panel h4 {
+      margin: 0 0 12px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+
+    .notes-panel p, .notes-panel li, .help-panel li {
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .notes-panel a { color: var(--cyan); }
+
+    .help-panel ul {
+      columns: 2;
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .confidential {
+      display: inline-block;
+      border: 1px solid rgba(255,255,255,.2);
+      padding: .45em .75em;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-size: clamp(10px, .8vw, 13px);
+      color: var(--muted);
+    }
+
+    .title-meta {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      color: var(--muted);
+      font-size: clamp(13px, 1.15vw, 18px);
+    }
+
+    .ask-band {
+      margin-top: clamp(18px, 2vw, 32px);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: clamp(24px, 3vw, 50px);
+      padding: clamp(18px, 2vw, 30px) 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .ask-band .big-number {
+      font-size: clamp(50px, 5.7vw, 90px);
+      color: var(--orange);
+    }
+
+    .truth-label {
+      display: inline-flex;
+      align-items: center;
+      gap: .6em;
+      color: var(--orange);
+      font-size: clamp(13px, 1.1vw, 18px);
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      margin-bottom: .8em;
+    }
+
+    .truth-label::before {
+      content: "";
+      width: .65em;
+      height: .65em;
+      background: var(--orange);
+      transform: rotate(45deg);
+    }
+
+    @media (max-width: 760px) {
+      .split, .split.equal, .split.wide-right { gap: 24px; }
+      .legend { grid-template-columns: 1fr; }
+      .risk-grid { gap: 12px 24px; }
+      .controls { display: none; }
+    }
+
+    @media print {
+      @page { size: 13.333in 7.5in; margin: 0; }
+      html, body {
+        width: auto;
+        height: auto;
+        overflow: visible;
+        background: white;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      .deck-shell, .deck {
+        width: auto;
+        height: auto;
+        display: block;
+        overflow: visible;
+        box-shadow: none;
+      }
+      .deck::before { display: none; }
+      .slide, .slide.active {
+        display: flex !important;
+        position: relative;
+        width: 13.333in;
+        height: 7.5in;
+        page-break-after: always;
+        animation: none;
+      }
+      .controls, .progress, .notes-panel, .help-panel { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck-shell" aria-label="Investor presentation">
+    <section class="deck" id="deck">
+
+      <article class="slide active center" data-title="Title">
+        <div class="kicker">Investor discussion deck • Agustus 2026</div>
+        <h1>Satu API untuk object storage yang tidak lagi terikat satu provider.</h1>
+        <p class="lead">Multi-provider object storage control plane dan data gateway untuk perusahaan yang melayani banyak client.</p>
+        <div class="rule"></div>
+        <div class="title-meta">
+          <span class="confidential">Concept-stage</span>
+          <span>Indonesia / SEA B2B</span>
+          <span>Model keuangan belum diaudit</span>
+        </div>
+        <div class="foot">
+          <span>Multi-Provider Object Storage SaaS</span>
+          <span>01</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Semua pernyataan status dan positioning pada slide ini adalah pernyataan internal. Produk belum memiliki production system atau audited revenue berdasarkan informasi yang tersedia.</p>
+        </aside>
+      </article>
+
+      <article class="slide warm" data-title="Investment thesis">
+        <div class="kicker">Tesis yang jujur</div>
+        <h2>Peluangnya nyata—tetapi bisnis ini gagal bila bandwidth dan kompatibilitas dianggap detail teknis.</h2>
+        <div class="split grow">
+          <div>
+            <div class="statement">
+              <strong>Value proposition kuat</strong>
+              <span>Satu API, scoped credentials, quota, audit, dan placement lintas-provider.</span>
+            </div>
+            <div class="statement orange-line">
+              <strong>Data plane adalah pusat risiko</strong>
+              <span>Full proxy meningkatkan kontrol, tetapi juga bandwidth, COGS, dan operational burden.</span>
+            </div>
+            <div class="statement red-line">
+              <strong>Belum ada bukti komersial</strong>
+              <span>Belum ada historical CAC, churn, revenue, atau compatibility data produksi.</span>
+            </div>
+          </div>
+          <div>
+            <div class="truth-label">Investment premise</div>
+            <p class="lead white">Modal awal harus membeli evidence: design partners, reliability, willingness to pay, dan unit economics.</p>
+            <p>Bukan membiayai scale sebelum product-market fit terbukti.</p>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Model investasi: milestone-based</span>
+          <span>02</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Kesimpulan ini merupakan analisis internal dari arsitektur dan risk register proyek. Tidak ada traction yang diasumsikan.</p>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Problem">
+        <div class="kicker">Masalah</div>
+        <h2>Perusahaan multi-client mengulang masalah storage yang sama untuk setiap pelanggan.</h2>
+        <div class="split equal grow">
+          <div>
+            <ul class="clean">
+              <li>Credential provider tersebar di banyak aplikasi dan environment.</li>
+              <li>Client harus memahami endpoint, region, bucket, serta policy provider.</li>
+              <li>Quota, audit, dan folder access tidak konsisten.</li>
+              <li>Migrasi provider menyentuh aplikasi bisnis satu per satu.</li>
+            </ul>
+          </div>
+          <div>
+            <div class="big-number red">N × M</div>
+            <div class="metric-label">N aplikasi × M provider menciptakan integration sprawl.</div>
+            <div class="rule"></div>
+            <p class="lead">Biaya tersembunyi bukan hanya storage—tetapi engineering, support, credential risk, dan perubahan provider.</p>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Target pain: governance dan abstraction</span>
+          <span>03</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Problem statement adalah hipotesis pelanggan yang harus divalidasi melalui design-partner interviews. Tidak ada angka eksternal yang diklaim.</p>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Solution">
+        <div class="kicker">Solusi</div>
+        <h2>Satu virtual namespace memisahkan aplikasi client dari provider fisik.</h2>
+        <div class="architecture">
+          <div class="arch-node">
+            <strong>Client apps</strong>
+            <span>Satu API key atau S3-compatible config</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="arch-node blue-border">
+            <strong>Storage gateway</strong>
+            <span>Auth, prefix policy, quota, placement, usage</span>
+          </div>
+          <div class="arrow">→</div>
+          <div class="arch-node orange-border">
+            <strong>S3 providers</strong>
+            <span>AWS, R2, B2, MinIO, generic S3</span>
+          </div>
+        </div>
+        <div class="horizontal-metrics">
+          <div class="metric">
+            <strong>1 API</strong>
+            <span>Provider abstraction untuk client</span>
+          </div>
+          <div class="metric">
+            <strong>Prefix ACL</strong>
+            <span>Credential scoped ke logical folder</span>
+          </div>
+          <div class="metric">
+            <strong>Policy</strong>
+            <span>Priority, weight, threshold, health</span>
+          </div>
+        </div>
+        <div class="foot">
+          <span>BYOS: customer tetap memiliki provider account</span>
+          <span>04</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <ul>
+            <li>AWS S3 prefixes are logical groupings, not physical directories: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-prefixes.html</li>
+            <li>Cloudflare R2 presigned URLs and temporary credentials: https://developers.cloudflare.com/r2/api/s3/presigned-urls/</li>
+          </ul>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Architecture">
+        <div class="kicker">Arsitektur yang menjaga margin</div>
+        <h2>Control plane shared; data plane dipilih sesuai kebutuhan dan willingness to pay.</h2>
+        <div class="split equal grow">
+          <div>
+            <h3 class="cyan">Managed direct</h3>
+            <p class="lead white">Client mengirim file langsung ke provider melalui presigned URL.</p>
+            <ul class="clean">
+              <li>COGS dan bottleneck gateway lebih rendah.</li>
+              <li>Provider hostname dapat terlihat.</li>
+              <li>OPNsense tidak melihat trafik tersebut.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="orange">Full proxy</h3>
+            <p class="lead white">Semua byte melewati gateway produk.</p>
+            <ul class="clean money">
+              <li>Stable endpoint dan provider tersembunyi.</li>
+              <li>Bandwidth dapat di-shape.</li>
+              <li>COGS, TLS, socket, dan HA meningkat.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="flow-note">
+          <div>
+            <strong>Default: hybrid</strong>
+            <p>Direct untuk volume besar; proxy sebagai fitur premium atau requirement khusus.</p>
+          </div>
+          <div>
+            <strong>OPNsense: hard cap, bukan billing engine</strong>
+            <p>Per-tenant entitlement tetap ditegakkan oleh aplikasi dan Redis.</p>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Margin bergantung pada transfer mix</span>
+          <span>05</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <ul>
+            <li>OPNsense shaping uses pipes, queues, interface, IP, direction, and port: https://docs.opnsense.org/manual/shaping.html</li>
+            <li>Cloudflare R2 presigned URL behavior: https://developers.cloudflare.com/r2/api/s3/presigned-urls/</li>
+          </ul>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Product wedge">
+        <div class="kicker">Product wedge</div>
+        <h2>Mulai dari governance yang dibayar pelanggan—bukan mengejar seluruh fitur S3.</h2>
+        <div class="compare">
+          <div class="compare-col good">
+            <h3 class="cyan">MVP yang dijual</h3>
+            <ul class="clean">
+              <li>Multi-tenant organization dan RBAC.</li>
+              <li>Provider registry dan bucket import.</li>
+              <li>Virtual namespace dan file explorer.</li>
+              <li>Scoped API credentials dan quota.</li>
+              <li>Priority/weighted placement.</li>
+              <li>Audit, usage, dan reconciliation.</li>
+            </ul>
+          </div>
+          <div class="compare-col bad">
+            <h3 class="red">Sengaja ditunda</h3>
+            <ul class="clean risk">
+              <li>Full AWS S3 parity.</li>
+              <li>Replication dan erasure coding.</li>
+              <li>Non-S3 protocols.</li>
+              <li>Lifecycle/versioning normalization.</li>
+              <li>Private-network connector.</li>
+              <li>Dedicated full stack per tenant.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Custom REST API lebih dulu; S3 facade setelah demand terbukti</span>
+          <span>06</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <ul>
+            <li>Cyberduck supports multiple protocols beyond S3, illustrating why “all Cyberduck providers” is out of scope: https://docs.cyberduck.io/protocols/</li>
+            <li>Backblaze documents limitations in its S3-compatible surface: https://www.backblaze.com/docs/cloud-storage-s3-compatible-api</li>
+          </ul>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Customer">
+        <div class="kicker">Ideal customer profile</div>
+        <h2>Pembeli awal adalah perusahaan yang sudah memiliki banyak client—dan sudah merasakan integration sprawl.</h2>
+        <div class="horizontal-metrics grow" style="align-items:center">
+          <div class="metric">
+            <strong>MSP</strong>
+            <span>Mengelola storage dan credential beberapa pelanggan.</span>
+          </div>
+          <div class="metric">
+            <strong>SaaS B2B</strong>
+            <span>Butuh isolated client storage tanpa provider coupling.</span>
+          </div>
+          <div class="metric">
+            <strong>Agency / SI</strong>
+            <span>Menyerahkan API storage ke banyak project/client.</span>
+          </div>
+        </div>
+        <div class="statement orange-line">
+          <strong>Qualification gate</strong>
+          <span>Minimal dua provider/bucket, kebutuhan credential delegation, dan pain yang bernilai setidaknya Rp5 juta per bulan.</span>
+        </div>
+        <p class="small">Hipotesis ICP ini belum tervalidasi. Design-partner interviews harus dilakukan sebelum sales hiring besar.</p>
+        <div class="foot">
+          <span>Beachhead: Indonesia, lalu SEA melalui partner</span>
+          <span>07</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>ICP dan willingness-to-pay threshold adalah asumsi internal untuk discovery, bukan hasil survei pasar.</p>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Alternatives">
+        <div class="kicker">Alternatif yang sudah ada</div>
+        <h2>Kami tidak menggantikan storage provider; kami menjual control layer di atasnya.</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24%">Alternatif</th>
+              <th style="width:34%">Kuat di</th>
+              <th>Kesenjangan yang ditargetkan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Provider console</strong></td>
+              <td>Native features dan reliability</td>
+              <td>Single-provider; client abstraction tetap dibuat sendiri</td>
+            </tr>
+            <tr>
+              <td><strong>Cyberduck / rclone</strong></td>
+              <td>Transfer dan operator tooling</td>
+              <td>Bukan SaaS multi-tenant API control plane</td>
+            </tr>
+            <tr>
+              <td><strong>MinIO / Ceph</strong></td>
+              <td>Self-hosted object storage</td>
+              <td>Operational ownership tinggi; bukan BYOS aggregator sederhana</td>
+            </tr>
+            <tr>
+              <td><strong>Custom integration</strong></td>
+              <td>Fit ke kebutuhan internal</td>
+              <td>Engineering cost berulang dan sulit distandardisasi</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="statement">
+          <strong>Defensibility yang realistis</strong>
+          <span>Compatibility test corpus, policy engine, operational reliability, integrations, dan switching cost—bukan algoritma rahasia.</span>
+        </div>
+        <div class="foot">
+          <span>Moat dibangun melalui execution dan trust</span>
+          <span>08</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <ul>
+            <li>Cyberduck protocol scope: https://docs.cyberduck.io/protocols/</li>
+            <li>Comparison categories are internal product analysis, not a claim of feature completeness for each alternative.</li>
+          </ul>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Business model">
+        <div class="kicker">Business model</div>
+        <h2>Subscription untuk control plane; proxy traffic tidak pernah dijual unlimited.</h2>
+        <table class="pricing">
+          <thead>
+            <tr>
+              <th style="width:18%">Plan</th>
+              <th style="width:20%">Harga asumsi</th>
+              <th>Value utama</th>
+              <th style="width:22%">Data plane</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Starter</td>
+              <td>Rp1,5 jt/bln</td>
+              <td>Basic namespace, API credential, usage</td>
+              <td>Direct preferred</td>
+            </tr>
+            <tr>
+              <td>Growth</td>
+              <td>Rp5 jt/bln</td>
+              <td>Multi-provider placement, quota, audit</td>
+              <td>Shared gateway</td>
+            </tr>
+            <tr>
+              <td>Business</td>
+              <td>Rp12 jt/bln</td>
+              <td>Tier pool, support, advanced policy</td>
+              <td>Metered proxy</td>
+            </tr>
+            <tr>
+              <td>Enterprise</td>
+              <td>Mulai Rp30 jt/bln</td>
+              <td>Dedicated gateway/VIP dan support terms</td>
+              <td>Dedicated cap</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="horizontal-metrics">
+          <div class="metric">
+            <strong>BYOS</strong>
+            <span>Customer membayar provider langsung.</span>
+          </div>
+          <div class="metric">
+            <strong>Rp10–75 jt</strong>
+            <span>Asumsi setup/onboarding satu kali.</span>
+          </div>
+          <div class="metric">
+            <strong>Metered</strong>
+            <span>Proxy per GB setelah transit quote tervalidasi.</span>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Pricing harus divalidasi dengan 10 design partners</span>
+          <span>09</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Semua harga plan adalah asumsi perencanaan internal, bukan harga pasar tervalidasi. Taxes/VAT tidak termasuk.</p>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Market and GTM">
+        <div class="kicker">Market hypothesis & go-to-market</div>
+        <h2>Ukuran peluang dihitung bottom-up—tanpa TAM yang belum bisa dibuktikan.</h2>
+        <div class="split wide-right grow">
+          <div>
+            <div class="big-number cyan">Rp48 M</div>
+            <div class="metric-label">ARR potential dari 500 target accounts × Rp8 juta blended MRR.</div>
+            <p class="small">Ini target-account hypothesis, bukan market statistic.</p>
+          </div>
+          <div>
+            <div class="timeline">
+              <div class="milestone">
+                <div class="dot"></div>
+                <strong>0–3 bln</strong>
+                <p>20 interviews, 5 design partners, provider spikes.</p>
+              </div>
+              <div class="milestone">
+                <div class="dot"></div>
+                <strong>4–6 bln</strong>
+                <p>Private beta dan 3 paid pilots.</p>
+              </div>
+              <div class="milestone">
+                <div class="dot"></div>
+                <strong>7–12 bln</strong>
+                <p>Founder-led sales; target 10 paying orgs.</p>
+              </div>
+              <div class="milestone">
+                <div class="dot"></div>
+                <strong>13–18 bln</strong>
+                <p>Channel/MSP motion; target 25 paying orgs.</p>
+              </div>
+            </div>
+            <div class="statement orange-line">
+              <strong>Realistic sales cycle: 2–6 bulan</strong>
+              <span>Security review, provider testing, dan migration concern memperlambat enterprise close.</span>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Target Y3: 150 accounts; bukan asumsi pasar yang sudah dimiliki</span>
+          <span>10</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>500 accounts, Rp8 juta MRR, sales cycle, dan account targets adalah internal planning assumptions. Formula: 500 × Rp8.000.000 × 12 = Rp48.000.000.000 ARR potential.</p>
+        </aside>
+      </article>
+
+      <article class="slide warm" data-title="Initial cost">
+        <div class="kicker">Cost awal • 0–6 bulan</div>
+        <h2>Rp1,55 miliar untuk membangun beta yang dapat diuji pelanggan.</h2>
+        <div class="split equal grow">
+          <div>
+            <div class="big-number orange">Rp1,55 M</div>
+            <div class="metric-label">Budgetary estimate; bukan quotation vendor.</div>
+            <div class="cost-stack" aria-label="Initial cost allocation">
+              <div class="c1" style="width:50.3%">50%</div>
+              <div class="c2" style="width:18.1%">18%</div>
+              <div class="c3" style="width:10.3%">10%</div>
+              <div class="c4" style="width:7.7%">8%</div>
+              <div class="c5" style="width:13.6%">14%</div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-row"><i class="c1"></i><span>Product & engineering</span><strong>Rp780 jt</strong></div>
+            <div class="legend-row"><i class="c2"></i><span>Infra, hardware, gateway lab</span><strong>Rp280 jt</strong></div>
+            <div class="legend-row"><i class="c3"></i><span>Security & legal</span><strong>Rp160 jt</strong></div>
+            <div class="legend-row"><i class="c4"></i><span>Discovery & paid pilots</span><strong>Rp120 jt</strong></div>
+            <div class="legend-row"><i class="c5"></i><span>Contingency</span><strong>Rp210 jt</strong></div>
+          </div>
+        </div>
+        <div class="statement red-line">
+          <strong>Yang belum termasuk</strong>
+          <span>Founder equity, tax/VAT, enterprise compliance certification besar, dan full S3-compatible facade.</span>
+        </div>
+        <div class="foot">
+          <span>Team plan, bukan current headcount</span>
+          <span>11</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Semua biaya adalah budgetary assumptions per Agustus 2026. Harus divalidasi dengan payroll aktual dan minimal tiga vendor quotes. Total: 780 + 280 + 160 + 120 + 210 = Rp1.550 juta.</p>
+        </aside>
+      </article>
+
+      <article class="slide warm" data-title="Operating cost">
+        <div class="kicker">Operations setelah beta</div>
+        <h2>Base burn sekitar Rp285 juta per bulan—sebelum variable proxy COGS.</h2>
+        <div class="split equal grow">
+          <div>
+            <table class="pricing">
+              <tbody>
+                <tr><td>Payroll & benefits</td><td class="numeric"><strong>Rp175 jt</strong></td></tr>
+                <tr><td>Cloud, gateway, network/colo</td><td class="numeric"><strong>Rp45 jt</strong></td></tr>
+                <tr><td>Security, tools, legal/accounting</td><td class="numeric"><strong>Rp15 jt</strong></td></tr>
+                <tr><td>Sales, marketing, customer success</td><td class="numeric"><strong>Rp35 jt</strong></td></tr>
+                <tr><td>Operating contingency</td><td class="numeric"><strong>Rp15 jt</strong></td></tr>
+                <tr><td><strong>Base monthly burn</strong></td><td class="numeric orange"><strong>Rp285 jt</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <div class="big-number orange">Rp3,42 M</div>
+            <div class="metric-label">12 bulan operasi setelah beta pada burn dasar.</div>
+            <div class="rule"></div>
+            <ul class="clean money">
+              <li>Proxy bandwidth bertambah mengikuti volume.</li>
+              <li>24×7 support belum sepenuhnya dibiayai.</li>
+              <li>Dedicated enterprise gateway harus dibayar customer.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Rp285 jt × 12 = Rp3,42 M</span>
+          <span>12</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Operational costs adalah internal planning assumptions. Formula 12-month post-beta cost: Rp285 juta × 12 = Rp3,42 miliar. Variable proxy COGS tidak termasuk dalam base monthly burn dan harus dibebankan melalui metered pricing.</p>
+        </aside>
+      </article>
+
+      <article class="slide warm" data-title="Unit economics">
+        <div class="kicker">Unit economics</div>
+        <h2>Gross margin hanya menarik bila sebagian besar byte tidak melewati gateway.</h2>
+        <div class="split equal grow">
+          <div>
+            <h3 class="green">Direct-heavy mix</h3>
+            <div class="big-number green">75–82%</div>
+            <div class="metric-label">Target gross margin setelah scale awal.</div>
+            <p>Customer membayar storage provider; platform menanggung control plane dan limited transfer.</p>
+          </div>
+          <div>
+            <h3 class="red">Proxy-heavy mix</h3>
+            <div class="big-number red">&lt;50%</div>
+            <div class="metric-label">Bisa terjadi bila bandwidth dijual terlalu murah.</div>
+            <p>Harus ada per-GB charge, hard cap, atau dedicated gateway fee.</p>
+          </div>
+        </div>
+        <div class="flow-note">
+          <div>
+            <strong>Provider economics tidak seragam</strong>
+            <p>R2 menyatakan direct egress gratis; B2 memberi free egress sampai batas tertentu; AWS bergantung region/path.</p>
+          </div>
+          <div>
+            <strong>OPNsense menjaga fairness, bukan margin</strong>
+            <p>Shaping membatasi Mbps tetapi tidak menghapus biaya per GB atau transit.</p>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Margin range adalah target model, belum observed</span>
+          <span>13</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <ul>
+            <li>Cloudflare R2 standard storage and egress pricing: https://developers.cloudflare.com/r2/pricing/</li>
+            <li>Backblaze B2 pricing and egress terms: https://www.backblaze.com/cloud-storage/pricing</li>
+            <li>AWS S3 pricing varies by region, storage class, operations, and transfer path: https://aws.amazon.com/s3/pricing/</li>
+            <li>OPNsense traffic shaping scope: https://docs.opnsense.org/manual/shaping.html</li>
+          </ul>
+          <p>Gross-margin ranges are internal planning targets, not historical performance.</p>
+        </aside>
+      </article>
+
+      <article class="slide" data-title="Base forecast">
+        <div class="kicker">Base case • 3 tahun</div>
+        <h2>Base case baru mencapai EBITDA positif pada tahun ketiga.</h2>
+        <div class="split wide-right grow">
+          <div>
+            <table class="pricing">
+              <thead>
+                <tr><th></th><th class="numeric">Y1</th><th class="numeric">Y2</th><th class="numeric">Y3</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Revenue</td><td class="numeric">0,55</td><td class="numeric">3,40</td><td class="numeric">10,50</td></tr>
+                <tr><td>COGS</td><td class="numeric">0,18</td><td class="numeric">0,85</td><td class="numeric">2,31</td></tr>
+                <tr><td>Gross profit</td><td class="numeric">0,37</td><td class="numeric">2,55</td><td class="numeric">8,19</td></tr>
+                <tr><td>Operating expense</td><td class="numeric">3,00</td><td class="numeric">4,80</td><td class="numeric">6,90</td></tr>
+                <tr><td><strong>EBITDA</strong></td><td class="numeric red"><strong>-2,63</strong></td><td class="numeric red"><strong>-2,25</strong></td><td class="numeric green"><strong>1,29</strong></td></tr>
+                <tr><td>Paying orgs EOY</td><td class="numeric">18</td><td class="numeric">65</td><td class="numeric">150</td></tr>
+              </tbody>
+            </table>
+            <p class="tiny">Rp miliar, nominal; tax/VAT dan financing cost tidak dimodelkan.</p>
+          </div>
+          <div class="bar-chart" aria-label="Revenue, gross profit, and EBITDA by year">
+            <div class="year-bar">
+              <div class="bars">
+                <div class="bar revenue" style="height:5.2%"><em>0,55</em></div>
+                <div class="bar gross" style="height:3.5%"><em>0,37</em></div>
+                <div class="bar negative" style="height:25%"><em>-2,63</em></div>
+              </div>
+              <div class="year-label">Y1</div>
+            </div>
+            <div class="year-bar">
+              <div class="bars">
+                <div class="bar revenue" style="height:32.4%"><em>3,40</em></div>
+                <div class="bar gross" style="height:24.3%"><em>2,55</em></div>
+                <div class="bar negative" style="height:21.4%"><em>-2,25</em></div>
+              </div>
+              <div class="year-label">Y2</div>
+            </div>
+            <div class="year-bar">
+              <div class="bars">
+                <div class="bar revenue" style="height:100%"><em>10,50</em></div>
+                <div class="bar gross" style="height:78%"><em>8,19</em></div>
+                <div class="bar positive" style="height:12.3%"><em>1,29</em></div>
+              </div>
+              <div class="year-label">Y3</div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Revenue • Gross profit • EBITDA magnitude</span>
+          <span>14</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Seluruh forecast adalah model internal, bukan audited forecast. Arithmetic: Y1 0,55 - 0,18 - 3,00 = -2,63; Y2 3,40 - 0,85 - 4,80 = -2,25; Y3 10,50 - 2,31 - 6,90 = 1,29. Customer counts are end-of-year targets.</p>
+        </aside>
+      </article>
+
+      <article class="slide danger" data-title="Scenarios">
+        <div class="kicker">Scenario analysis</div>
+        <h2>Downside case tidak mencapai break-even dalam tiga tahun.</h2>
+        <table class="scenario-table">
+          <thead>
+            <tr>
+              <th style="width:18%">Scenario</th>
+              <th class="numeric">Revenue Y1</th>
+              <th class="numeric">Revenue Y2</th>
+              <th class="numeric">Revenue Y3</th>
+              <th class="numeric">EBITDA Y3</th>
+              <th style="width:24%">Apa yang terjadi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="red"><strong>Downside</strong></td>
+              <td class="numeric">0,25</td>
+              <td class="numeric">1,40</td>
+              <td class="numeric">4,00</td>
+              <td class="numeric red">-2,00</td>
+              <td>Sales lambat, proxy mix tinggi, enterprise tertunda</td>
+            </tr>
+            <tr class="base-row">
+              <td class="cyan"><strong>Base</strong></td>
+              <td class="numeric">0,55</td>
+              <td class="numeric">3,40</td>
+              <td class="numeric">10,50</td>
+              <td class="numeric green">1,29</td>
+              <td>25 org di M18; margin membaik dengan direct transfer</td>
+            </tr>
+            <tr>
+              <td class="green"><strong>Upside</strong></td>
+              <td class="numeric">0,75</td>
+              <td class="numeric">5,50</td>
+              <td class="numeric">17,00</td>
+              <td class="numeric green">5,00</td>
+              <td>Channel/MSP bekerja dan enterprise dedicated terjual</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="horizontal-metrics">
+          <div class="metric">
+            <strong class="red">12 org</strong>
+            <span>Downside target M18</span>
+          </div>
+          <div class="metric">
+            <strong class="cyan">25 org</strong>
+            <span>Base target M18</span>
+          </div>
+          <div class="metric">
+            <strong class="green">45 org</strong>
+            <span>Upside target M18</span>
+          </div>
+        </div>
+        <p class="small">Tidak ada probabilitas yang dipaksakan. Scenario harus diperbarui setelah 10 paid customers dan 6 bulan usage data.</p>
+        <div class="foot">
+          <span>Rp miliar • model internal</span>
+          <span>15</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Semua scenario adalah planning assumptions. Tidak ada probabilitas atau historical cohort data. Downside EBITDA Y3 mengasumsikan revenue Rp4 miliar tidak cukup menutup cost base dan proxy COGS.</p>
+        </aside>
+      </article>
+
+      <article class="slide warm" data-title="Investment ask">
+        <div class="kicker">Investment ask</div>
+        <h2>Rp5,5 miliar untuk 18 bulan—membeli bukti, bukan menjanjikan profit.</h2>
+        <div class="ask-band">
+          <div class="big-number">Rp5,5 M</div>
+          <div>
+            <p class="lead white">Rp1,55 M build + Rp3,42 M post-beta operations + Rp0,53 M reserve.</p>
+            <p>Base case belum break-even dalam seed runway. Follow-on funding mungkin dibutuhkan pada bulan 16–20.</p>
+          </div>
+        </div>
+        <div class="cost-stack" aria-label="Use of funds">
+          <div class="c1" style="width:50%">50%</div>
+          <div class="c2" style="width:16%">16%</div>
+          <div class="c3" style="width:14%">14%</div>
+          <div class="c4" style="width:10%">10%</div>
+          <div class="c5" style="width:10%">10%</div>
+        </div>
+        <div class="legend">
+          <div class="legend-row"><i class="c1"></i><span>Product & team</span><strong>Rp2,75 M</strong></div>
+          <div class="legend-row"><i class="c2"></i><span>Infra, security, reliability</span><strong>Rp0,88 M</strong></div>
+          <div class="legend-row"><i class="c3"></i><span>Sales & customer success</span><strong>Rp0,77 M</strong></div>
+          <div class="legend-row"><i class="c4"></i><span>Legal, compliance, operations</span><strong>Rp0,55 M</strong></div>
+          <div class="legend-row"><i class="c5"></i><span>Contingency</span><strong>Rp0,55 M</strong></div>
+        </div>
+        <div class="foot">
+          <span>Target M18: 25 paying orgs • Rp150 jt MRR • ARR run-rate Rp1,8 M</span>
+          <span>16</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Use-of-funds model is internal. Allocation totals: 2,75 + 0,88 + 0,77 + 0,55 + 0,55 = Rp5,50 miliar. Runway formula: 1,55 + 3,42 + 0,53 = Rp5,50 miliar. Follow-on timing is a risk estimate, not a financing commitment.</p>
+        </aside>
+      </article>
+
+      <article class="slide danger" data-title="Risks">
+        <div class="kicker">Risk register</div>
+        <h2>Risiko terbesar bukan kompetitor—tetapi keamanan, margin, reliability, dan penjualan.</h2>
+        <div class="risk-grid grow">
+          <div class="risk-item">
+            <div class="risk-level">Kritis</div>
+            <div><strong>Credential atau tenant leak</strong><p>KMS/envelope encryption, org-scoped queries, isolation tests, break-glass audit.</p></div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-level">Tinggi</div>
+            <div><strong>Proxy bandwidth merusak margin</strong><p>Hybrid transfer, metered pricing, OPNsense cap, dedicated gateway fee.</p></div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-level">Tinggi</div>
+            <div><strong>S3 compatibility support burden</strong><p>Published support matrix, provider contract tests, limited MVP operations.</p></div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-level">Tinggi</div>
+            <div><strong>Metadata drift</strong><p>Gateway-only writes, object state machine, reconciliation, idempotency.</p></div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-level">Tinggi</div>
+            <div><strong>Enterprise sales terlalu lambat</strong><p>Paid pilots, qualification gate, no large sales team before evidence.</p></div>
+          </div>
+          <div class="risk-item">
+            <div class="risk-level">Tinggi</div>
+            <div><strong>Seed tidak mencapai profitability</strong><p>Milestone gates, burn cuts, bridge/follow-on planning by month 12.</p></div>
+          </div>
+        </div>
+        <div class="foot">
+          <span>Mitigation mengurangi risiko; tidak menghilangkannya</span>
+          <span>17</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <ul>
+            <li>OPNsense shaping capabilities: https://docs.opnsense.org/manual/shaping.html</li>
+            <li>Backblaze S3 compatibility limitations: https://www.backblaze.com/docs/cloud-storage-s3-compatible-api</li>
+            <li>Other risks and mitigations derive from the internal architecture risk register in project-docs/FEEDBACK.md and project-docs/TECHNOLOGY.md.</li>
+          </ul>
+        </aside>
+      </article>
+
+      <article class="slide center" data-title="Close">
+        <div class="kicker">Keputusan yang diminta</div>
+        <h1>Danai pembuktian. Hentikan lebih awal bila buktinya lemah.</h1>
+        <div class="horizontal-metrics">
+          <div class="metric">
+            <strong>M3</strong>
+            <span>5 design partners dan provider spike lulus.</span>
+          </div>
+          <div class="metric">
+            <strong>M6</strong>
+            <span>3 paid pilots; tenant isolation dan quota tervalidasi.</span>
+          </div>
+          <div class="metric">
+            <strong>M12</strong>
+            <span>≥10 paying orgs dan MRR ≥Rp50 juta.</span>
+          </div>
+        </div>
+        <div class="statement red-line">
+          <strong>Stop / pivot trigger</strong>
+          <span>Jika M12 memiliki &lt;5 paying organizations, &gt;60% revenue berasal dari custom project, atau proxy contribution margin negatif tanpa pricing fix.</span>
+        </div>
+        <p class="lead white"><span class="orange">Ask:</span> Rp5,5 miliar untuk runway 18 bulan dan keputusan berbasis bukti.</p>
+        <div class="foot">
+          <span>Concept-stage • model perlu diganti dengan data aktual setiap quarter</span>
+          <span>18</span>
+        </div>
+        <aside class="speaker-notes">
+          <h4>[Sources]</h4>
+          <p>Milestones and stop/pivot triggers are internal governance recommendations. They are intended to prevent continued spending without commercial evidence.</p>
+        </aside>
+      </article>
+
+    </section>
+  </main>
+
+  <div class="progress" id="progress"></div>
+
+  <nav class="controls" aria-label="Presentation controls">
+    <button type="button" id="prev" aria-label="Previous slide">←</button>
+    <button type="button" id="next" aria-label="Next slide">→</button>
+    <button type="button" id="notes" aria-label="Toggle source notes">N</button>
+    <button type="button" id="full" aria-label="Toggle fullscreen">F</button>
+    <button type="button" id="print" aria-label="Print deck">⎙</button>
+  </nav>
+
+  <aside class="notes-panel" id="notesPanel" aria-live="polite"></aside>
+
+  <aside class="help-panel" id="helpPanel">
+    <h4>Navigasi</h4>
+    <ul>
+      <li>→ / Space: berikutnya</li>
+      <li>←: sebelumnya</li>
+      <li>Home / End: awal / akhir</li>
+      <li>N: source notes</li>
+      <li>F: fullscreen</li>
+      <li>P: print / PDF</li>
+      <li>?: bantuan</li>
+    </ul>
+  </aside>
+
+  <script>
+    (function () {
+      var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+      var progress = document.getElementById("progress");
+      var notesPanel = document.getElementById("notesPanel");
+      var helpPanel = document.getElementById("helpPanel");
+      var current = 0;
+
+      function clamp(index) {
+        return Math.max(0, Math.min(slides.length - 1, index));
+      }
+
+      function show(index, updateHash) {
+        current = clamp(index);
+        slides.forEach(function (slide, i) {
+          slide.classList.toggle("active", i === current);
+          slide.setAttribute("aria-hidden", i === current ? "false" : "true");
+        });
+        progress.style.width = ((current + 1) / slides.length * 100) + "%";
+        document.title = (current + 1) + "/" + slides.length + " — " + slides[current].dataset.title;
+        var notes = slides[current].querySelector(".speaker-notes");
+        notesPanel.innerHTML = notes ? notes.innerHTML : "<h4>[Sources]</h4><p>Tidak ada notes.</p>";
+        if (updateHash !== false) {
+          history.replaceState(null, "", "#slide-" + (current + 1));
+        }
+      }
+
+      function fromHash() {
+        var match = location.hash.match(/slide-(\d+)/);
+        return match ? Number(match[1]) - 1 : 0;
+      }
+
+      function next() { show(current + 1); }
+      function prev() { show(current - 1); }
+
+      function toggleNotes() {
+        notesPanel.classList.toggle("open");
+      }
+
+      function toggleHelp() {
+        helpPanel.classList.toggle("open");
+      }
+
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(function () {});
+        } else {
+          document.exitFullscreen();
+        }
+      }
+
+      document.getElementById("next").addEventListener("click", next);
+      document.getElementById("prev").addEventListener("click", prev);
+      document.getElementById("notes").addEventListener("click", toggleNotes);
+      document.getElementById("full").addEventListener("click", toggleFullscreen);
+      document.getElementById("print").addEventListener("click", function () { window.print(); });
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+          event.preventDefault();
+          next();
+        } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
+          event.preventDefault();
+          prev();
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          show(0);
+        } else if (event.key === "End") {
+          event.preventDefault();
+          show(slides.length - 1);
+        } else if (event.key.toLowerCase() === "n") {
+          toggleNotes();
+        } else if (event.key.toLowerCase() === "f") {
+          toggleFullscreen();
+        } else if (event.key.toLowerCase() === "p") {
+          window.print();
+        } else if (event.key === "?") {
+          toggleHelp();
+        } else if (event.key === "Escape") {
+          notesPanel.classList.remove("open");
+          helpPanel.classList.remove("open");
+        }
+      });
+
+      window.addEventListener("hashchange", function () {
+        show(fromHash(), false);
+      });
+
+      show(fromHash(), false);
+    })();
+  </script>
+</body>
+</html>

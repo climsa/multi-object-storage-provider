@@ -1,0 +1,669 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum RoleScope {
+  GLOBAL
+  ORGANIZATION
+}
+
+enum ProviderType {
+  AWS_S3
+  CLOUDFLARE_R2
+  BACKBLAZE_B2
+  MINIO
+  GENERIC_S3
+}
+
+enum ProviderStatus {
+  PENDING
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  DISABLED
+}
+
+enum AddressingMode {
+  AUTO
+  VIRTUAL_HOSTED
+  PATH_STYLE
+}
+
+enum BucketStatus {
+  PENDING
+  ACTIVE
+  UNHEALTHY
+  DISABLED
+}
+
+enum NamespaceStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum NamespaceTransferMode {
+  DIRECT
+  PROXIED
+}
+
+enum NamespaceVersioningMode {
+  DISABLED
+}
+
+enum PlacementPolicyStrategy {
+  PRIORITY_WEIGHTED
+}
+
+enum PlacementPolicyStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ApiCredentialStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum FolderGrantPrincipalType {
+  ROLE
+  API_CREDENTIAL
+}
+
+enum ObjectRecordState {
+  PENDING
+  AVAILABLE
+  DELETING
+  DELETED
+}
+
+enum ObjectLocationState {
+  CANDIDATE
+  ACTIVE
+  RETAINED
+  DELETED
+}
+
+enum MigrationRunState {
+  CREATED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum MigrationItemState {
+  PENDING
+  COPYING
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum UploadSessionState {
+  INITIATED
+  COMPLETING
+  COMPLETED
+  ABORTED
+  EXPIRED
+}
+
+enum UploadTransferMode {
+  DIRECT
+  MULTIPART
+  PROXIED
+}
+
+model User {
+  id                  String          @id @default(uuid()) @db.Uuid
+  email               String          @unique @db.VarChar(320)
+  passwordHash        String          @db.VarChar(255)
+  status              UserStatus      @default(ACTIVE)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @db.Timestamptz(3)
+  memberships         Membership[]
+  globalRoles         UserRole[]
+  refreshTokens       RefreshToken[]
+  activityLogs        ActivityLog[]   @relation("ActivityLogActor")
+  apiCredentials      ApiCredential[]
+  createdFolderGrants FolderGrant[]   @relation("FolderGrantCreatedBy")
+  migrationRuns       MigrationRun[]  @relation("MigrationRunInitiatedBy")
+  platformSettings    PlatformSetting[] @relation("PlatformSettingUpdatedBy")
+
+  @@index([status])
+}
+
+model PlatformSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(120)
+  value       Json
+  version     Int      @default(1)
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  updatedBy   User?    @relation("PlatformSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
+}
+
+model Organization {
+  id                  String               @id @default(uuid()) @db.Uuid
+  name                String               @db.VarChar(200)
+  slug                String               @unique @db.VarChar(100)
+  status              OrganizationStatus   @default(ACTIVE)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  memberships         Membership[]
+  roles               Role[]
+  activityLogs        ActivityLog[]
+  providerConnections ProviderConnection[]
+  bucketConnections   BucketConnection[]
+  namespaces          VirtualNamespace[]
+  apiCredentials      ApiCredential[]
+  folderGrants        FolderGrant[]
+  objectRecords       ObjectRecord[]
+  objectLocations     ObjectLocation[]
+  uploadSessions      UploadSession[]
+  usageCounters       UsageCounter[]
+  multipartParts      MultipartPart[]
+  migrationRuns       MigrationRun[]
+  migrationItems      MigrationItem[]
+
+  @@index([status])
+}
+
+model Membership {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @db.Uuid
+  organizationId String           @db.Uuid
+  status         MembershipStatus @default(INVITED)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles          MemberRole[]
+
+  @@unique([id, organizationId])
+  @@unique([userId, organizationId])
+  @@index([organizationId, status])
+}
+
+model Role {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String?          @db.Uuid
+  name           String           @db.VarChar(100)
+  scope          RoleScope
+  isSystem       Boolean          @default(false)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+  organization   Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions    RolePermission[]
+  memberRoles    MemberRole[]
+  userRoles      UserRole[]
+
+  @@unique([id, organizationId])
+  @@unique([id, scope])
+  @@unique([organizationId, name])
+  @@index([scope])
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(120)
+  description String?          @db.VarChar(500)
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model MemberRole {
+  membershipId   String     @db.Uuid
+  roleId         String     @db.Uuid
+  organizationId String     @db.Uuid
+  assignedAt     DateTime   @default(now()) @db.Timestamptz(3)
+  membership     Membership @relation(fields: [membershipId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  role           Role       @relation(fields: [roleId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@id([membershipId, roleId])
+  @@index([organizationId])
+}
+
+model UserRole {
+  userId     String    @db.Uuid
+  roleId     String    @db.Uuid
+  roleScope  RoleScope @default(GLOBAL)
+  assignedAt DateTime  @default(now()) @db.Timestamptz(3)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role      @relation(fields: [roleId, roleScope], references: [id, scope], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RefreshToken {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @db.Uuid
+  sessionId    String?        @db.Uuid
+  tokenHash    String         @unique @db.VarChar(255)
+  deviceName   String?        @db.VarChar(200)
+  ipAddress    String?        @db.VarChar(64)
+  userAgent    String?        @db.VarChar(1024)
+  expiresAt    DateTime       @db.Timestamptz(3)
+  revokedAt    DateTime?      @db.Timestamptz(3)
+  replacedById String?        @unique @db.Uuid
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy   RefreshToken?  @relation("RefreshTokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     RefreshToken[] @relation("RefreshTokenRotation")
+
+  @@index([userId, expiresAt])
+  @@index([userId, sessionId, revokedAt])
+}
+
+model ActivityLog {
+  id             BigInt        @id @default(autoincrement())
+  organizationId String?       @db.Uuid
+  actorId        String?       @db.Uuid
+  action         String        @db.VarChar(120)
+  entityType     String        @db.VarChar(120)
+  entityId       String?       @db.VarChar(128)
+  metadata       Json?
+  ipAddress      String?       @db.VarChar(64)
+  userAgent      String?       @db.VarChar(1024)
+  requestId      String        @db.VarChar(64)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor          User?         @relation("ActivityLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([requestId])
+}
+
+model ProviderConnection {
+  id                  String               @id @default(uuid()) @db.Uuid
+  organizationId      String               @db.Uuid
+  displayName         String               @db.VarChar(200)
+  type                ProviderType
+  endpoint            String               @db.Text
+  region              String               @db.VarChar(100)
+  addressingMode      AddressingMode       @default(AUTO)
+  tlsRequired         Boolean              @default(true)
+  status              ProviderStatus       @default(PENDING)
+  lastHealthCheckedAt DateTime?            @db.Timestamptz(3)
+  healthDetails       Json?
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  credential          ProviderCredential?
+  capabilities        ProviderCapability[]
+  buckets             BucketConnection[]
+
+  @@unique([organizationId, displayName])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+}
+
+model ProviderCredential {
+  id                   String             @id @default(uuid()) @db.Uuid
+  providerConnectionId String             @unique @db.Uuid
+  encryptedPayload     Bytes
+  encryptedDataKey     Bytes
+  iv                   Bytes
+  authTag              Bytes
+  algorithm            String             @db.VarChar(50)
+  formatVersion        Int                @default(1)
+  keyVersion           String             @db.VarChar(100)
+  createdAt            DateTime           @default(now()) @db.Timestamptz(3)
+  rotatedAt            DateTime?          @db.Timestamptz(3)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+}
+
+model ProviderCapability {
+  id                   String             @id @default(uuid()) @db.Uuid
+  providerConnectionId String             @db.Uuid
+  capability           String             @db.VarChar(100)
+  supported            Boolean
+  details              Json?
+  testedAt             DateTime           @default(now()) @db.Timestamptz(3)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([providerConnectionId, capability])
+  @@index([providerConnectionId, supported])
+}
+
+model BucketConnection {
+  id                   String             @id @default(uuid()) @db.Uuid
+  organizationId       String             @db.Uuid
+  providerConnectionId String             @db.Uuid
+  bucketName           String             @db.VarChar(255)
+  status               BucketStatus       @default(PENDING)
+  createdAt            DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @db.Timestamptz(3)
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  providerConnection   ProviderConnection @relation(fields: [providerConnectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  placementTargets     PlacementTarget[]
+  objectLocations      ObjectLocation[]
+  uploadSessions       UploadSession[]
+  migrationRunsSource  MigrationRun[]     @relation("MigrationRunSourceBucket")
+  migrationRunsTarget  MigrationRun[]     @relation("MigrationRunTargetBucket")
+
+  @@unique([providerConnectionId, bucketName])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+}
+
+model VirtualNamespace {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @db.Uuid
+  name                String                  @db.VarChar(200)
+  slug                String                  @db.VarChar(100)
+  status              NamespaceStatus         @default(ACTIVE)
+  quotaBytes          BigInt                  @db.BigInt
+  maxObjectSizeBytes  BigInt?                 @db.BigInt
+  defaultTransferMode NamespaceTransferMode   @default(DIRECT)
+  versioningMode      NamespaceVersioningMode @default(DISABLED)
+  createdAt           DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @db.Timestamptz(3)
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  placementPolicy     PlacementPolicy?
+  apiCredentials      ApiCredential[]
+  folderGrants        FolderGrant[]
+  objectRecords       ObjectRecord[]
+  migrationRuns       MigrationRun[]
+  uploadSessions      UploadSession[]
+  usageCounters       UsageCounter[]
+
+  @@unique([organizationId, slug])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+}
+
+model PlacementPolicy {
+  id             String                  @id @default(uuid()) @db.Uuid
+  namespaceId    String                  @unique @db.Uuid
+  organizationId String                  @db.Uuid
+  strategy       PlacementPolicyStrategy @default(PRIORITY_WEIGHTED)
+  status         PlacementPolicyStatus   @default(ACTIVE)
+  createdAt      DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime                @updatedAt @db.Timestamptz(3)
+  namespace      VirtualNamespace        @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  targets        PlacementTarget[]
+
+  @@unique([id, organizationId])
+  @@unique([namespaceId, organizationId])
+  @@index([organizationId, status])
+}
+
+model PlacementTarget {
+  id                      String           @id @default(uuid()) @db.Uuid
+  policyId                String           @db.Uuid
+  organizationId          String           @db.Uuid
+  bucketConnectionId      String           @db.Uuid
+  priorityTier            Int              @default(0)
+  weight                  Int              @default(100)
+  configuredCapacityBytes BigInt?
+  thresholdPercent        Int              @default(100)
+  enabled                 Boolean          @default(true)
+  createdAt               DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime         @updatedAt @db.Timestamptz(3)
+  policy                  PlacementPolicy  @relation(fields: [policyId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  bucketConnection        BucketConnection @relation(fields: [bucketConnectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  uploadSessions          UploadSession[]
+
+  @@unique([policyId, bucketConnectionId])
+  @@unique([id, organizationId])
+  @@index([organizationId, policyId, priorityTier, enabled])
+  @@index([organizationId, bucketConnectionId])
+}
+
+model ApiCredential {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @db.Uuid
+  namespaceId    String              @db.Uuid
+  keyId          String              @unique @db.VarChar(100)
+  secretHash     String              @db.VarChar(128)
+  status         ApiCredentialStatus @default(ACTIVE)
+  expiresAt      DateTime?           @db.Timestamptz(3)
+  lastUsedAt     DateTime?           @db.Timestamptz(3)
+  createdById    String              @db.Uuid
+  revokedAt      DateTime?           @db.Timestamptz(3)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace      VirtualNamespace    @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdBy      User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  uploadSessions UploadSession[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, namespaceId, status])
+}
+
+model FolderGrant {
+  id             String                   @id @default(uuid()) @db.Uuid
+  organizationId String                   @db.Uuid
+  namespaceId    String                   @db.Uuid
+  principalType  FolderGrantPrincipalType
+  principalId    String                   @db.Uuid
+  prefix         String                   @db.VarChar(1024)
+  actions        String[]                 @db.VarChar(16)
+  expiresAt      DateTime?                @db.Timestamptz(3)
+  createdById    String                   @db.Uuid
+  createdAt      DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime                 @updatedAt @db.Timestamptz(3)
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace      VirtualNamespace         @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  createdBy      User                     @relation("FolderGrantCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, namespaceId, principalType, principalId, prefix])
+  @@index([organizationId, namespaceId, principalType, principalId])
+  @@index([organizationId, expiresAt])
+}
+
+model ObjectRecord {
+  id                     String            @id @default(uuid()) @db.Uuid
+  organizationId         String            @db.Uuid
+  namespaceId            String            @db.Uuid
+  logicalKey             String            @db.VarChar(2048)
+  activeObjectLocationId String?           @db.Uuid
+  state                  ObjectRecordState @default(PENDING)
+  sizeBytes              BigInt            @db.BigInt
+  contentType            String?           @db.VarChar(255)
+  checksum               String?           @db.VarChar(255)
+  createdAt              DateTime          @default(now()) @db.Timestamptz(3)
+  modifiedAt             DateTime          @updatedAt @db.Timestamptz(3)
+  organization           Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace              VirtualNamespace  @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  activeObjectLocation   ObjectLocation?   @relation("ObjectRecordActiveLocation", fields: [activeObjectLocationId], references: [id], onDelete: SetNull)
+  locations              ObjectLocation[]  @relation("ObjectRecordLocations")
+  migrationItems         MigrationItem[]
+
+  @@unique([namespaceId, logicalKey])
+  @@unique([id, organizationId])
+  @@unique([activeObjectLocationId])
+  @@index([organizationId, namespaceId, state, modifiedAt])
+}
+
+model ObjectLocation {
+  id                   String              @id @default(uuid()) @db.Uuid
+  organizationId       String              @db.Uuid
+  objectRecordId       String              @db.Uuid
+  bucketConnectionId   String              @db.Uuid
+  physicalKey          String              @db.VarChar(2048)
+  state                ObjectLocationState @default(CANDIDATE)
+  etag                 String?             @db.VarChar(255)
+  providerVersionId    String?             @db.VarChar(255)
+  providerLastModified DateTime?           @db.Timestamptz(3)
+  storageClass         String?             @db.VarChar(100)
+  encryptionMetadata   Json?
+  verifiedAt           DateTime?           @db.Timestamptz(3)
+  createdAt            DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(3)
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  objectRecord         ObjectRecord        @relation("ObjectRecordLocations", fields: [objectRecordId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  bucketConnection     BucketConnection    @relation(fields: [bucketConnectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  activeFor            ObjectRecord?       @relation("ObjectRecordActiveLocation")
+
+  @@unique([id, organizationId])
+  @@unique([objectRecordId, bucketConnectionId, physicalKey])
+  @@index([organizationId, objectRecordId, state])
+  @@index([organizationId, bucketConnectionId, state])
+}
+
+model UsageCounter {
+  id                String           @id @default(uuid()) @db.Uuid
+  organizationId    String           @db.Uuid
+  namespaceId       String           @db.Uuid
+  usedBytes         BigInt           @default(0) @db.BigInt
+  reservedBytes     BigInt           @default(0) @db.BigInt
+  objectCount       BigInt           @default(0) @db.BigInt
+  activeUploadCount Int              @default(0)
+  requestCount      BigInt           @default(0) @db.BigInt
+  ingressBytes      BigInt           @default(0) @db.BigInt
+  egressBytes       BigInt           @default(0) @db.BigInt
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace         VirtualNamespace @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, namespaceId])
+  @@index([organizationId, namespaceId])
+}
+
+model UploadSession {
+  id                      String             @id @default(uuid()) @db.Uuid
+  organizationId          String             @db.Uuid
+  namespaceId             String             @db.Uuid
+  placementTargetId       String             @db.Uuid
+  bucketConnectionId      String             @db.Uuid
+  createdByCredentialId   String             @db.Uuid
+  idempotencyKey          String             @db.VarChar(200)
+  logicalKey              String             @db.VarChar(2048)
+  physicalKey             String             @db.VarChar(2048)
+  reservedBytes           BigInt             @db.BigInt
+  allowOverwrite          Boolean            @default(false)
+  contentType             String?            @db.VarChar(255)
+  checksum                String?            @db.VarChar(255)
+  transferMode            UploadTransferMode @default(DIRECT)
+  providerUploadId        String?            @db.VarChar(255)
+  providerUploadFinalized Boolean            @default(false)
+  state                   UploadSessionState @default(INITIATED)
+  expiresAt               DateTime           @db.Timestamptz(3)
+  completedAt             DateTime?          @db.Timestamptz(3)
+  createdAt               DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime           @updatedAt @db.Timestamptz(3)
+  organization            Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace               VirtualNamespace   @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  placementTarget         PlacementTarget    @relation(fields: [placementTargetId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  bucketConnection        BucketConnection   @relation(fields: [bucketConnectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByCredential     ApiCredential      @relation(fields: [createdByCredentialId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  multipartParts          MultipartPart[]
+
+  @@unique([organizationId, namespaceId, idempotencyKey])
+  @@unique([id, organizationId])
+  @@index([organizationId, namespaceId, state, expiresAt])
+  @@index([organizationId, bucketConnectionId, state])
+}
+
+model MigrationRun {
+  id                       String            @id @default(uuid()) @db.Uuid
+  organizationId           String            @db.Uuid
+  namespaceId              String            @db.Uuid
+  sourceBucketConnectionId String            @db.Uuid
+  targetBucketConnectionId String            @db.Uuid
+  initiatedById            String            @db.Uuid
+  state                    MigrationRunState @default(CREATED)
+  totalItems               Int               @default(0)
+  completedItems           Int               @default(0)
+  failedItems              Int               @default(0)
+  lastError                String?           @db.VarChar(1000)
+  startedAt                DateTime?         @db.Timestamptz(3)
+  completedAt              DateTime?         @db.Timestamptz(3)
+  createdAt                DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime          @updatedAt @db.Timestamptz(3)
+  organization             Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  namespace                VirtualNamespace  @relation(fields: [namespaceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  sourceBucketConnection   BucketConnection  @relation("MigrationRunSourceBucket", fields: [sourceBucketConnectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  targetBucketConnection   BucketConnection  @relation("MigrationRunTargetBucket", fields: [targetBucketConnectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  initiatedBy              User              @relation("MigrationRunInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
+  items                    MigrationItem[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, namespaceId, state, createdAt])
+}
+
+model MigrationItem {
+  id                       String             @id @default(uuid()) @db.Uuid
+  organizationId           String             @db.Uuid
+  migrationRunId           String             @db.Uuid
+  objectRecordId           String             @db.Uuid
+  sourceLocationId         String             @db.Uuid
+  sourceBucketConnectionId String             @db.Uuid
+  targetBucketConnectionId String             @db.Uuid
+  sourcePhysicalKey        String             @db.VarChar(2048)
+  targetPhysicalKey        String             @db.VarChar(2048)
+  sourceEtag               String?            @db.VarChar(255)
+  sourceLastModified      DateTime?          @db.Timestamptz(3)
+  sizeBytes                BigInt             @db.BigInt
+  checksum                 String?            @db.VarChar(255)
+  state                    MigrationItemState @default(PENDING)
+  attempts                 Int                @default(0)
+  lastError                String?            @db.VarChar(1000)
+  nextAttemptAt            DateTime?          @db.Timestamptz(3)
+  createdAt                DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime           @updatedAt @db.Timestamptz(3)
+  organization             Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  migrationRun             MigrationRun       @relation(fields: [migrationRunId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  objectRecord             ObjectRecord       @relation(fields: [objectRecordId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([migrationRunId, objectRecordId])
+  @@unique([id, organizationId])
+  @@index([organizationId, migrationRunId, state, nextAttemptAt])
+}
+
+model MultipartPart {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizationId  String        @db.Uuid
+  uploadSessionId String        @db.Uuid
+  partNumber      Int
+  etag            String?       @db.VarChar(255)
+  sizeBytes       BigInt?       @db.BigInt
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(3)
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  uploadSession   UploadSession @relation(fields: [uploadSessionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([uploadSessionId, partNumber])
+  @@unique([id, organizationId])
+  @@index([organizationId, uploadSessionId, partNumber])
+}

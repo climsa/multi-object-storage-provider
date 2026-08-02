@@ -1,0 +1,2449 @@
+openapi: 3.1.0
+info:
+  title: Multi-Provider Object Storage API
+  version: 0.1.0
+  description: |
+    Initial contract for the implemented control-plane and custom storage API.
+    This draft covers the organization membership and role administration
+    vertical slice together with provider setup and storage clients.
+    Organization management routes require a user JWT and the
+    x-organization-id header. Platform routes require a global role with the
+    platform permission and do not accept an organization header as scope.
+    Storage routes require an API credential in the form keyId.secret and
+    enforce namespace and folder-grant boundaries.
+servers:
+  - url: http://localhost:4000
+    description: Local API
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Organizations
+  - name: Providers
+  - name: Buckets
+  - name: Namespaces
+  - name: API credentials
+  - name: Folder grants
+  - name: Migrations
+  - name: Platform
+  - name: Storage
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      operationId: health
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    const: ok
+  /readyz:
+    get:
+      tags: [Health]
+      operationId: readiness
+      responses:
+        '200':
+          description: Dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: A dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      tags: [Health]
+      operationId: metrics
+      security: [{ metricsBearer: [] }]
+      responses:
+        '200':
+          description: Prometheus metrics for the deployment.
+          content:
+            text/plain:
+              schema: { type: string }
+        '404':
+          description: Metrics are disabled or the token is invalid.
+
+  /v1/auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      description: Sets rotated httpOnly refresh and CSRF cookies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Access token and public user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: Origin is not allowed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      operationId: refresh
+      description: Requires the refresh cookie and matching X-CSRF-Token header.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Rotated access and refresh session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/CsrfFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /v1/auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      description: Revokes the refresh session and clears auth cookies.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Session logged out.
+        '403':
+          $ref: '#/components/responses/CsrfFailed'
+  /v1/auth/session:
+    get:
+      tags: [Authentication]
+      operationId: session
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current public user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/organizations/{organizationId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Organizations]
+      operationId: getOrganization
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Organization summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organization]
+                properties:
+                  organization:
+                    $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Organizations]
+      operationId: updateOrganization
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        '200':
+          description: Updated organization.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organization]
+                properties:
+                  organization:
+                    $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/organizations/{organizationId}/activity-logs:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Organizations]
+      operationId: listActivityLogs
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{1,20}$'
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{1,3}$'
+            default: '50'
+        - name: action
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+        - name: entityType
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        '200':
+          description: Activity log page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityLog'
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/organizations/{organizationId}/usage:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Organizations]
+      operationId: getOrganizationUsage
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: string, pattern: '^\d{1,3}$', default: '50' }
+      responses:
+        '200':
+          description: Organization usage totals and a bounded namespace page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsagePageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/organizations/{organizationId}/usage/export:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Organizations]
+      operationId: exportOrganizationUsage
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: string, pattern: '^\d{1,3}$', default: '50' }
+      responses:
+        '200':
+          description: Bounded CSV usage export. Continue with X-Next-Cursor when present.
+          headers:
+            X-Next-Cursor:
+              schema: { type: string, format: uuid }
+          content:
+            text/csv:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/organizations/{organizationId}/members:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Organizations]
+      operationId: listOrganizationMembers
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Organization members and assigned role names.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Organizations]
+      operationId: addOrganizationMember
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberAddRequest'
+      responses:
+        '201':
+          description: Member added.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [member]
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/organizations/{organizationId}/members/{membershipId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/MembershipId'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    patch:
+      tags: [Organizations]
+      operationId: updateMemberStatus
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberStatusUpdateRequest'
+      responses:
+        '200':
+          description: Member status updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [member]
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/organizations/{organizationId}/members/{membershipId}/roles:
+    post:
+      tags: [Organizations]
+      operationId: assignMemberRole
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdPath'
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleAssignmentRequest'
+      responses:
+        '200':
+          description: Updated member role assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [member]
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/organizations/{organizationId}/roles:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Organizations]
+      operationId: listOrganizationRoles
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Organization roles and permission keys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roles]
+                properties:
+                  roles:
+                    type: array
+                    items: { $ref: '#/components/schemas/Role' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Organizations]
+      operationId: createOrganizationRole
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreateRequest'
+      responses:
+        '201':
+          description: Role created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role]
+                properties:
+                  role: { $ref: '#/components/schemas/Role' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/organizations/{organizationId}/roles/{roleId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdPath'
+      - $ref: '#/components/parameters/RoleId'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    patch:
+      tags: [Organizations]
+      operationId: updateOrganizationRole
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdateRequest'
+      responses:
+        '200':
+          description: Role updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role]
+                properties:
+                  role: { $ref: '#/components/schemas/Role' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Organizations]
+      operationId: deleteOrganizationRole
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Role deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/providers:
+    get:
+      tags: [Providers]
+      operationId: listProviders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Organization-scoped providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProviderConnection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Providers]
+      operationId: createProvider
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderCreateRequest'
+      responses:
+        '201':
+          description: Provider created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider]
+                properties:
+                  provider:
+                    $ref: '#/components/schemas/ProviderConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/providers/{providerId}:
+    parameters:
+      - $ref: '#/components/parameters/ProviderId'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Providers]
+      operationId: getProvider
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Provider summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider]
+                properties:
+                  provider:
+                    $ref: '#/components/schemas/ProviderConnection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Providers]
+      operationId: updateProvider
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderUpdateRequest'
+      responses:
+        '200':
+          description: Provider updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider]
+                properties:
+                  provider:
+                    $ref: '#/components/schemas/ProviderConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Providers]
+      operationId: deleteProvider
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Provider deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/providers/{providerId}/test:
+    post:
+      tags: [Providers]
+      operationId: testProvider
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                bucketName:
+                  type: string
+                  minLength: 3
+                  maxLength: 255
+      responses:
+        '200':
+          description: Provider test succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderTestResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/ProviderFailure'
+  /v1/providers/{providerId}/buckets:
+    get:
+      tags: [Providers]
+      operationId: discoverProviderBuckets
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Accessible bucket names.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bucketNames]
+                properties:
+                  bucketNames:
+                    type: array
+                    items:
+                      type: string
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/ProviderFailure'
+
+  /v1/buckets:
+    get:
+      tags: [Buckets]
+      operationId: listBucketConnections
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Imported bucket connections.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [buckets]
+                properties:
+                  buckets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BucketConnection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/buckets/import:
+    post:
+      tags: [Buckets]
+      operationId: importBucket
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BucketImportRequest'
+      responses:
+        '201':
+          description: Bucket imported.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bucket]
+                properties:
+                  bucket:
+                    $ref: '#/components/schemas/BucketConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/ProviderFailure'
+  /v1/buckets/{bucketId}:
+    parameters:
+      - $ref: '#/components/parameters/BucketId'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Buckets]
+      operationId: getBucketConnection
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Bucket connection.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bucket]
+                properties:
+                  bucket:
+                    $ref: '#/components/schemas/BucketConnection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Buckets]
+      operationId: updateBucketStatus
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status:
+                  type: string
+                  enum: [ACTIVE, DISABLED]
+      responses:
+        '200':
+          description: Bucket status updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bucket]
+                properties:
+                  bucket:
+                    $ref: '#/components/schemas/BucketConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Buckets]
+      operationId: deleteBucketConnection
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Bucket connection deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/namespaces:
+    get:
+      tags: [Namespaces]
+      operationId: listNamespaces
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Virtual namespaces.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespaces]
+                properties:
+                  namespaces:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Namespace'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Namespaces]
+      operationId: createNamespace
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamespaceCreateRequest'
+      responses:
+        '201':
+          description: Namespace created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace]
+                properties:
+                  namespace:
+                    $ref: '#/components/schemas/Namespace'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/namespaces/{namespaceId}:
+    parameters:
+      - $ref: '#/components/parameters/NamespaceId'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Namespaces]
+      operationId: getNamespace
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Namespace summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace]
+                properties:
+                  namespace:
+                    $ref: '#/components/schemas/Namespace'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Namespaces]
+      operationId: updateNamespace
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamespaceUpdateRequest'
+      responses:
+        '200':
+          description: Namespace updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace]
+                properties:
+                  namespace:
+                    $ref: '#/components/schemas/Namespace'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Namespaces]
+      operationId: deleteNamespace
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Namespace deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/namespaces/{namespaceId}/targets:
+    post:
+      tags: [Namespaces]
+      operationId: addNamespacePlacementTarget
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NamespaceId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementTargetRequest'
+      responses:
+        '201':
+          description: Namespace with the new target.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace]
+                properties:
+                  namespace:
+                    $ref: '#/components/schemas/Namespace'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/namespaces/{namespaceId}/placement-policy:
+    put:
+      tags: [Namespaces]
+      operationId: updateNamespacePlacementPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NamespaceId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementPolicyRequest'
+      responses:
+        '200':
+          description: Namespace with the updated policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace]
+                properties:
+                  namespace:
+                    $ref: '#/components/schemas/Namespace'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/api-credentials:
+    get:
+      tags: [API credentials]
+      operationId: listApiCredentials
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Credential metadata; secrets are never returned by this operation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [credentials]
+                properties:
+                  credentials:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiCredential'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [API credentials]
+      operationId: createApiCredential
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiCredentialCreateRequest'
+      responses:
+        '201':
+          description: Credential metadata and one-time secret.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiCredential'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/api-credentials/{credentialId}/rotate:
+    post:
+      tags: [API credentials]
+      operationId: rotateApiCredential
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CredentialId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiCredentialRotateRequest'
+      responses:
+        '200':
+          description: Rotated credential metadata and one-time secret.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiCredential'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/api-credentials/{credentialId}/revoke:
+    post:
+      tags: [API credentials]
+      operationId: revokeApiCredential
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CredentialId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Revoked credential metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [credential]
+                properties:
+                  credential:
+                    $ref: '#/components/schemas/ApiCredential'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/folder-grants:
+    get:
+      tags: [Folder grants]
+      operationId: listFolderGrants
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - name: namespaceId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: principalType
+          in: query
+          schema:
+            type: string
+            enum: [ROLE, API_CREDENTIAL]
+        - name: principalId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Folder grants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grants]
+                properties:
+                  grants:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FolderGrant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Folder grants]
+      operationId: createFolderGrant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderGrantCreateRequest'
+      responses:
+        '201':
+          description: Folder grant created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grant]
+                properties:
+                  grant:
+                    $ref: '#/components/schemas/FolderGrant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/folder-grants/{grantId}:
+    delete:
+      tags: [Folder grants]
+      operationId: deleteFolderGrant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '204':
+          description: Folder grant deleted.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/migrations:
+    get:
+      tags: [Migrations]
+      operationId: listMigrations
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Migration runs scoped to the organization.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [migrations]
+                properties:
+                  migrations:
+                    type: array
+                    items: { $ref: '#/components/schemas/MigrationRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Migrations]
+      operationId: createMigration
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MigrationCreateRequest' }
+      responses:
+        '201':
+          description: Migration run created in CREATED state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [migration]
+                properties:
+                  migration: { $ref: '#/components/schemas/MigrationRun' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+  /v1/migrations/{migrationId}:
+    get:
+      tags: [Migrations]
+      operationId: getMigration
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - name: migrationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Migration run status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [migration]
+                properties:
+                  migration: { $ref: '#/components/schemas/MigrationRun' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/migrations/{migrationId}/control:
+    post:
+      tags: [Migrations]
+      operationId: controlMigration
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - name: migrationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MigrationControlRequest' }
+      responses:
+        '200':
+          description: Updated migration run.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [migration]
+                properties:
+                  migration: { $ref: '#/components/schemas/MigrationRun' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /storage/v1/{namespace}/objects:
+    get:
+      tags: [Storage]
+      operationId: listObjects
+      security: [{ storageCredential: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NamespaceSlug'
+        - name: prefix
+          in: query
+          schema:
+            type: string
+            maxLength: 2048
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{1,3}$'
+            default: '100'
+      responses:
+        '200':
+          description: Objects visible to the API credential.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [objects]
+                properties:
+                  objects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ObjectSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /storage/v1/{namespace}/objects/{key}:
+    parameters:
+      - $ref: '#/components/parameters/NamespaceSlug'
+      - name: key
+        in: path
+        required: true
+        allowReserved: true
+        description: Logical object key; slash-separated keys are accepted.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+    head:
+      tags: [Storage]
+      operationId: headObject
+      security: [{ storageCredential: [] }]
+      responses:
+        '200':
+          description: Object metadata.
+          headers:
+            Content-Length:
+              schema: { type: integer, format: int64, minimum: 0 }
+            Content-Type:
+              schema: { type: string }
+            ETag:
+              schema: { type: string }
+            Last-Modified:
+              schema: { type: string, format: http-date }
+            Content-Disposition:
+              schema: { type: string, const: attachment }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    get:
+      tags: [Storage]
+      operationId: downloadObject
+      security: [{ storageCredential: [] }]
+      responses:
+        '302':
+          description: Redirect to a short-lived provider download URL.
+          headers:
+            Location:
+              required: true
+              schema: { type: string, format: uri }
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Storage]
+      operationId: deleteObject
+      security: [{ storageCredential: [] }]
+      responses:
+        '204':
+          description: Object deletion accepted and completed.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: Provider deletion could not be completed; the object remains retryable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /storage/v1/{namespace}/uploads:
+    post:
+      tags: [Storage]
+      operationId: initiateUpload
+      security: [{ storageCredential: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NamespaceSlug'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadInitiateRequest'
+      responses:
+        '201':
+          description: Upload reservation and transfer instructions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Namespace quota or object-size limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /storage/v1/uploads/{uploadId}/complete:
+    post:
+      tags: [Storage]
+      operationId: completeUpload
+      security: [{ storageCredential: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadCompleteRequest'
+      responses:
+        '200':
+          description: Verified completed upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSummary'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: Provider object metadata did not match the reservation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /storage/v1/uploads/{uploadId}/parts/{partNumber}:
+    post:
+      tags: [Storage]
+      operationId: presignUploadPart
+      security: [{ storageCredential: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+        - name: partNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+      responses:
+        '200':
+          description: Short-lived presigned part upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartUploadTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /storage/v1/uploads/{uploadId}:
+    put:
+      tags: [Storage]
+      operationId: proxyUpload
+      security: [{ storageCredential: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: Verified completed proxied upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '411':
+          description: Content-Length is required for a proxied upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The reserved size, namespace quota, or proxy limit was exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Provider object metadata did not match the reservation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: Provider upload could not be completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Storage]
+      operationId: abortUpload
+      security: [{ storageCredential: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+      responses:
+        '204':
+          description: Unfinished upload aborted and reservation released.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/platform/organizations:
+    get:
+      tags: [Platform]
+      operationId: listPlatformOrganizations
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        '200':
+          description: Organizations visible to a global platform administrator.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizations]
+                properties:
+                  organizations:
+                    type: array
+                    items: { $ref: '#/components/schemas/PlatformOrganization' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/platform/settings:
+    get:
+      tags: [Platform]
+      operationId: getPlatformSettings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Allowlisted non-secret platform policy settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [settings]
+                properties:
+                  settings:
+                    type: array
+                    items: { $ref: '#/components/schemas/PlatformSetting' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Platform]
+      operationId: updatePlatformSettings
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformSettingsUpdateRequest'
+      responses:
+        '200':
+          description: Updated settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [settings]
+                properties:
+                  settings:
+                    type: array
+                    items: { $ref: '#/components/schemas/PlatformSetting' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived dashboard access token.
+    storageCredential:
+      type: http
+      scheme: bearer
+      bearerFormat: keyId.secret
+      description: API credential scoped to one organization and namespace.
+    metricsBearer:
+      type: http
+      scheme: bearer
+      description: Deployment-provided metrics scrape token.
+  parameters:
+    OrganizationIdHeader:
+      name: x-organization-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrganizationIdPath:
+      name: organizationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProviderId:
+      name: providerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BucketId:
+      name: bucketId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NamespaceId:
+      name: namespaceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RoleId:
+      name: roleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CredentialId:
+      name: credentialId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NamespaceSlug:
+      name: namespace
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$'
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Must match the non-httpOnly mosp_csrf cookie.
+      schema:
+        type: string
+        minLength: 32
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthenticated:
+      description: Missing, invalid, expired, revoked, or out-of-scope credential.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Authenticated principal lacks the required permission.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    CsrfFailed:
+      description: CSRF cookie/header validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource was not found in the caller's tenant scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Resource state or idempotency conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooLarge:
+      description: The requested batch exceeds the bounded operation limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Rate or concurrency limit exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ProviderFailure:
+      description: Provider call failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          minLength: 1
+          maxLength: 256
+          writeOnly: true
+    AuthUser:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+    AuthTokenResponse:
+      type: object
+      required: [accessToken, accessTokenExpiresAt, user]
+      properties:
+        accessToken:
+          type: string
+          readOnly: true
+        accessTokenExpiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/AuthUser'
+    ProviderCreateRequest:
+      type: object
+      required: [displayName, type, endpoint, region, accessKeyId, secretAccessKey]
+      additionalProperties: false
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        type:
+          type: string
+          enum: [AWS_S3, CLOUDFLARE_R2, BACKBLAZE_B2, MINIO, GENERIC_S3]
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        region: { type: string, minLength: 1, maxLength: 100 }
+        addressingMode:
+          type: string
+          enum: [AUTO, VIRTUAL_HOSTED, PATH_STYLE]
+          default: AUTO
+        accessKeyId: { type: string, minLength: 1, maxLength: 512, writeOnly: true }
+        secretAccessKey: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+        sessionToken: { type: string, minLength: 1, maxLength: 8192, writeOnly: true }
+    ProviderUpdateRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: At least one field is required; credential changes require both key fields.
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        region: { type: string, minLength: 1, maxLength: 100 }
+        addressingMode:
+          type: string
+          enum: [AUTO, VIRTUAL_HOSTED, PATH_STYLE]
+        accessKeyId: { type: string, minLength: 1, maxLength: 512, writeOnly: true }
+        secretAccessKey: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+        sessionToken: { type: string, minLength: 1, maxLength: 8192, nullable: true, writeOnly: true }
+    ProviderConnection:
+      type: object
+      required: [id, displayName, type, endpoint, region, addressingMode, status, lastHealthCheckedAt]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        type: { type: string }
+        endpoint: { type: string, format: uri }
+        region: { type: string }
+        addressingMode: { type: string }
+        status: { type: string }
+        lastHealthCheckedAt: { type: string, format: date-time, nullable: true }
+    ProviderTestResult:
+      type: object
+      required: [ok, bucketNames, capabilities]
+      properties:
+        ok: { type: boolean }
+        bucketNames:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: array
+          items:
+            type: object
+            required: [capability, supported]
+            properties:
+              capability: { type: string }
+              supported: { type: boolean }
+              details:
+                type: object
+                additionalProperties: { type: string }
+    BucketImportRequest:
+      type: object
+      required: [bucketName, providerConnectionId]
+      additionalProperties: false
+      properties:
+        bucketName: { type: string, minLength: 3, maxLength: 255 }
+        providerConnectionId: { type: string, format: uuid }
+    BucketConnection:
+      type: object
+      required: [id, bucketName, providerConnectionId, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        bucketName: { type: string }
+        providerConnectionId: { type: string, format: uuid }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+    BigIntString:
+      type: string
+      pattern: '^\d+$'
+      description: Non-negative PostgreSQL BIGINT encoded as a JSON string.
+    PlacementTarget:
+      type: object
+      required: [id, bucketConnectionId, priorityTier, weight, thresholdPercent, enabled, configuredCapacityBytes, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        bucketConnectionId: { type: string, format: uuid }
+        priorityTier: { type: integer, minimum: 0 }
+        weight: { type: integer, minimum: 1 }
+        thresholdPercent: { type: integer, minimum: 0, maximum: 100 }
+        enabled: { type: boolean }
+        configuredCapacityBytes: { $ref: '#/components/schemas/BigIntString', nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PlacementPolicy:
+      type: object
+      required: [id, strategy, status, targets, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        strategy: { type: string, enum: [PRIORITY_WEIGHTED] }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        targets:
+          type: array
+          items: { $ref: '#/components/schemas/PlacementTarget' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Namespace:
+      type: object
+      required: [id, name, slug, status, quotaBytes, maxObjectSizeBytes, defaultTransferMode, versioningMode, placementPolicy, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        quotaBytes: { $ref: '#/components/schemas/BigIntString' }
+        maxObjectSizeBytes: { $ref: '#/components/schemas/BigIntString', nullable: true }
+        defaultTransferMode: { type: string, enum: [DIRECT, PROXIED] }
+        versioningMode: { type: string, enum: [DISABLED] }
+        placementPolicy: { $ref: '#/components/schemas/PlacementPolicy', nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    NamespaceCreateRequest:
+      type: object
+      required: [name, slug, quotaBytes]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$' }
+        quotaBytes: { $ref: '#/components/schemas/BigIntString' }
+        maxObjectSizeBytes: { $ref: '#/components/schemas/BigIntString', nullable: true }
+        defaultTransferMode: { type: string, enum: [DIRECT, PROXIED], default: DIRECT }
+        versioningMode: { type: string, enum: [DISABLED], default: DISABLED }
+    NamespaceUpdateRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: Partial update; at least one field is required.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$' }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        quotaBytes: { $ref: '#/components/schemas/BigIntString' }
+        maxObjectSizeBytes: { $ref: '#/components/schemas/BigIntString', nullable: true }
+        defaultTransferMode: { type: string, enum: [DIRECT, PROXIED] }
+        versioningMode: { type: string, enum: [DISABLED] }
+    PlacementTargetRequest:
+      type: object
+      required: [bucketConnectionId]
+      additionalProperties: false
+      properties:
+        bucketConnectionId: { type: string, format: uuid }
+        priorityTier: { type: integer, minimum: 0, default: 0 }
+        weight: { type: integer, minimum: 1, default: 100 }
+        configuredCapacityBytes: { $ref: '#/components/schemas/BigIntString', nullable: true }
+        thresholdPercent: { type: integer, minimum: 0, maximum: 100, default: 100 }
+        enabled: { type: boolean, default: true }
+    PlacementPolicyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        strategy: { type: string, enum: [PRIORITY_WEIGHTED], default: PRIORITY_WEIGHTED }
+        status: { type: string, enum: [ACTIVE, DISABLED], default: ACTIVE }
+        targets:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PlacementTargetRequest' }
+    ApiCredential:
+      type: object
+      required: [id, keyId, status, createdAt, updatedAt, createdById, expiresAt, revokedAt, lastUsedAt, namespace]
+      properties:
+        id: { type: string, format: uuid }
+        keyId: { type: string }
+        status: { type: string, enum: [ACTIVE, REVOKED, EXPIRED] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        createdById: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        namespace:
+          type: object
+          required: [id, name, slug]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            slug: { type: string }
+    ApiCredentialCreateRequest:
+      type: object
+      required: [namespaceId]
+      additionalProperties: false
+      properties:
+        namespaceId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    ApiCredentialRotateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        expiresAt: { type: string, format: date-time, nullable: true }
+    CreatedApiCredential:
+      type: object
+      required: [credential, secret]
+      properties:
+        credential: { $ref: '#/components/schemas/ApiCredential' }
+        secret:
+          type: string
+          writeOnly: true
+          description: Returned only at create/rotate time; store it immediately.
+    FolderGrant:
+      type: object
+      required: [id, namespaceId, principalType, principalId, prefix, actions, createdAt, updatedAt, createdById, expiresAt, namespace]
+      properties:
+        id: { type: string, format: uuid }
+        namespaceId: { type: string, format: uuid }
+        principalType: { type: string, enum: [ROLE, API_CREDENTIAL] }
+        principalId: { type: string, format: uuid }
+        prefix: { type: string, maxLength: 1024 }
+        actions:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [list, read, write, delete] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        createdById: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        namespace:
+          type: object
+          required: [id, name, slug]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            slug: { type: string }
+    FolderGrantCreateRequest:
+      type: object
+      required: [namespaceId, principalType, principalId, prefix, actions]
+      additionalProperties: false
+      properties:
+        namespaceId: { type: string, format: uuid }
+        principalType: { type: string, enum: [ROLE, API_CREDENTIAL] }
+        principalId: { type: string, format: uuid }
+        prefix: { type: string, maxLength: 1024 }
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items: { type: string, enum: [list, read, write, delete] }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    ObjectSummary:
+      type: object
+      required: [key, sizeBytes, contentType, checksum, etag, modifiedAt]
+      properties:
+        key: { type: string }
+        sizeBytes: { $ref: '#/components/schemas/BigIntString' }
+        contentType: { type: string, nullable: true }
+        checksum: { type: string, nullable: true }
+        etag: { type: string, nullable: true }
+        modifiedAt: { type: string, format: date-time }
+    MigrationCreateRequest:
+      type: object
+      required: [namespaceId, sourceBucketConnectionId, targetBucketConnectionId]
+      additionalProperties: false
+      properties:
+        namespaceId: { type: string, format: uuid }
+        sourceBucketConnectionId: { type: string, format: uuid }
+        targetBucketConnectionId: { type: string, format: uuid }
+    MigrationControlRequest:
+      type: object
+      required: [action]
+      additionalProperties: false
+      properties:
+        action: { type: string, enum: [start, pause, cancel] }
+    MigrationRun:
+      type: object
+      required: [id, namespaceId, sourceBucketConnectionId, targetBucketConnectionId, state, totalItems, completedItems, failedItems, lastError, startedAt, completedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        namespaceId: { type: string, format: uuid }
+        sourceBucketConnectionId: { type: string, format: uuid }
+        targetBucketConnectionId: { type: string, format: uuid }
+        state: { type: string, enum: [CREATED, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED] }
+        totalItems: { type: integer, minimum: 0 }
+        completedItems: { type: integer, minimum: 0 }
+        failedItems: { type: integer, minimum: 0 }
+        lastError: { type: string, nullable: true }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UploadInitiateRequest:
+      type: object
+      required: [key, sizeBytes, idempotencyKey]
+      additionalProperties: false
+      properties:
+        key: { type: string, minLength: 1, maxLength: 2048 }
+        sizeBytes: { $ref: '#/components/schemas/BigIntString' }
+        contentType: { type: string, minLength: 1, maxLength: 255 }
+        checksum: { type: string, minLength: 1, maxLength: 255 }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+        overwrite: { type: boolean, default: false }
+    UploadCompleteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        parts:
+          type: array
+          maxItems: 10000
+          items:
+            type: object
+            required: [partNumber, etag, sizeBytes]
+            additionalProperties: false
+            properties:
+              partNumber: { type: integer, minimum: 1, maximum: 10000 }
+              etag: { type: string, minLength: 1, maxLength: 255 }
+              sizeBytes: { $ref: '#/components/schemas/BigIntString' }
+    UploadSummary:
+      type: object
+      required: [uploadId, key, sizeBytes, state, transferMode, expiresAt]
+      properties:
+        uploadId: { type: string, format: uuid }
+        key: { type: string }
+        sizeBytes: { $ref: '#/components/schemas/BigIntString' }
+        state: { type: string, enum: [INITIATED, COMPLETING, COMPLETED, ABORTED, EXPIRED] }
+        transferMode: { type: string, enum: [DIRECT, MULTIPART, PROXIED] }
+        expiresAt: { type: string, format: date-time }
+        method: { type: string, enum: [PUT] }
+        url: { type: string, format: uri }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+        partSizeBytes: { $ref: '#/components/schemas/BigIntString' }
+        partCount: { type: integer, minimum: 1, maximum: 10000 }
+    PartUploadTransfer:
+      type: object
+      required: [method, url, expiresAt]
+      properties:
+        method: { const: PUT }
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+    Organization:
+      type: object
+      required: [id, name, slug, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+    Member:
+      type: object
+      required: [id, userId, email, status, roles]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        status: { type: string, enum: [INVITED, ACTIVE, DISABLED] }
+        roles:
+          type: array
+          items: { type: string }
+    Role:
+      type: object
+      required: [id, name, isSystem, permissionKeys]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        isSystem: { type: boolean }
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+    MemberAddRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        roleId: { type: string, format: uuid }
+    MemberStatusUpdateRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+    RoleAssignmentRequest:
+      type: object
+      required: [roleId]
+      additionalProperties: false
+      properties:
+        roleId: { type: string, format: uuid }
+    RoleCreateRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+          default: []
+    RoleUpdateRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+    ActivityLog:
+      type: object
+      required: [id, action, entityType, requestId, createdAt, metadata, actor]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid, nullable: true }
+        requestId: { type: string }
+        createdAt: { type: string, format: date-time }
+        metadata: {}
+        actor:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string, format: email }
+    UsagePageResponse:
+      type: object
+      required: [usage]
+      properties:
+        usage:
+          type: object
+          required: [namespaces, nextCursor, totals]
+          properties:
+            nextCursor: { type: string, format: uuid, nullable: true }
+            totals: { $ref: '#/components/schemas/UsageTotals' }
+            namespaces:
+              type: array
+              items: { $ref: '#/components/schemas/NamespaceUsage' }
+    UsageTotals:
+      type: object
+      required: [usedBytes, reservedBytes, objectCount, activeUploadCount, requestCount, ingressBytes, egressBytes]
+      properties:
+        usedBytes: { type: string, pattern: '^\d+$' }
+        reservedBytes: { type: string, pattern: '^\d+$' }
+        objectCount: { type: string, pattern: '^\d+$' }
+        activeUploadCount: { type: integer, minimum: 0 }
+        requestCount: { type: string, pattern: '^\d+$' }
+        ingressBytes: { type: string, pattern: '^\d+$' }
+        egressBytes: { type: string, pattern: '^\d+$' }
+    NamespaceUsage:
+      allOf:
+        - $ref: '#/components/schemas/UsageTotals'
+        - type: object
+          required: [namespaceId, name, slug, status, quotaBytes, updatedAt]
+          properties:
+            namespaceId: { type: string, format: uuid }
+            name: { type: string }
+            slug: { type: string }
+            status: { type: string }
+            quotaBytes: { type: string, pattern: '^\d+$' }
+            updatedAt: { type: string, format: date-time, nullable: true }
+    PlatformOrganization:
+      type: object
+      required: [id, name, slug, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        createdAt: { type: string, format: date-time }
+    PlatformSetting:
+      type: object
+      required: [key, value, version, updatedAt, updatedBy]
+      properties:
+        key:
+          type: string
+          enum: [maintenance_mode, default_quota_bytes, default_max_object_size_bytes, default_transfer_mode, proxy_max_object_size_bytes, proxy_transfer_timeout_seconds, storage_max_in_flight, migration_max_concurrent_per_provider, migration_retry_delay_seconds, provider_health_check_interval_seconds]
+        value: {}
+        version: { type: integer, minimum: 0 }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        updatedBy:
+          type: object
+          nullable: true
+          required: [id, email]
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string, format: email }
+    PlatformSettingsUpdateRequest:
+      type: object
+      required: [values]
+      additionalProperties: false
+      properties:
+        values:
+          type: object
+          minProperties: 1
+          additionalProperties: false
+          properties:
+            maintenance_mode: { type: boolean }
+            default_quota_bytes: { type: string, pattern: '^\d+$' }
+            default_max_object_size_bytes: { type: string, pattern: '^\d+$', nullable: true }
+            default_transfer_mode: { type: string, enum: [DIRECT, PROXIED] }
+            proxy_max_object_size_bytes: { type: string, pattern: '^\d+$', description: 'Maximum proxied object size; code caps this at 1 GiB.' }
+            proxy_transfer_timeout_seconds: { type: integer, minimum: 10, maximum: 300, description: 'Proxy transfer timeout applied after API restart.' }
+            storage_max_in_flight: { type: integer, minimum: 1, maximum: 10000 }
+            migration_max_concurrent_per_provider: { type: integer, minimum: 1, maximum: 20 }
+            migration_retry_delay_seconds: { type: integer, minimum: 1, maximum: 86400 }
+            provider_health_check_interval_seconds: { type: integer, minimum: 5, maximum: 86400 }
+        expectedVersions:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }

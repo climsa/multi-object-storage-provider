@@ -1,0 +1,1 @@
+ALTER TYPE "UploadTransferMode" ADD VALUE 'PROXIED';
