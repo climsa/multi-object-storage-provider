@@ -13,6 +13,7 @@ import {
   HeadBucketCommand,
   HeadObjectCommand,
   ListBucketsCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -67,6 +68,27 @@ export interface ProviderObjectMetadata {
 export interface ProviderObjectStream {
   body: Readable;
   metadata: ProviderObjectMetadata;
+}
+
+export interface ProviderObjectListItem {
+  etag?: string;
+  key: string;
+  lastModified?: Date;
+  sizeBytes: bigint;
+  storageClass?: string;
+}
+
+export interface ProviderObjectListResult {
+  commonPrefixes: string[];
+  nextContinuationToken?: string;
+  objects: ProviderObjectListItem[];
+}
+
+export interface ProviderObjectListOptions {
+  continuationToken?: string;
+  delimiter?: string;
+  maxKeys?: number;
+  prefix?: string;
 }
 
 export interface MultipartUpload {
@@ -131,10 +153,7 @@ export class S3ProviderAdapter {
     const capabilities: ProviderCapabilityResult[] = [];
 
     if (bucketName) {
-      await this.client.send(
-        new HeadBucketCommand({ Bucket: bucketName }),
-        { abortSignal: AbortSignal.timeout(PROVIDER_OPERATION_TIMEOUT_MS) },
-      );
+      await this.testBucketAccess(bucketName);
       capabilities.push({ capability: "headBucket", supported: true });
     } else {
       const listed = await this.client.send(
@@ -155,6 +174,62 @@ export class S3ProviderAdapter {
     return bucketName
       ? { bucketName, bucketNames, capabilities }
       : { bucketNames, capabilities };
+  }
+
+  /**
+   * Validates that a caller can access an existing bucket without requiring
+   * write, presign, or multipart permissions. Bucket import must work for
+   * read-only provider credentials; capability probing remains the job of the
+   * explicit provider test flow above.
+   */
+  public async testBucketAccess(bucketName: string): Promise<void> {
+    await this.client.send(
+      new HeadBucketCommand({ Bucket: bucketName }),
+      { abortSignal: AbortSignal.timeout(PROVIDER_OPERATION_TIMEOUT_MS) },
+    );
+  }
+
+  public async listObjects(
+    bucketName: string,
+    options: ProviderObjectListOptions = {},
+  ): Promise<ProviderObjectListResult> {
+    const maxKeys = options.maxKeys ?? 100;
+    if (!Number.isInteger(maxKeys) || maxKeys < 1 || maxKeys > 1_000) {
+      throw new RangeError("maxKeys must be between 1 and 1000");
+    }
+
+    const result = await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: bucketName,
+        Delimiter: options.delimiter ?? "/",
+        MaxKeys: maxKeys,
+        ...(options.prefix ? { Prefix: options.prefix } : {}),
+        ...(options.continuationToken
+          ? { ContinuationToken: options.continuationToken }
+          : {}),
+      }),
+      { abortSignal: AbortSignal.timeout(this.operationTimeoutMs) },
+    );
+
+    return {
+      commonPrefixes: (result.CommonPrefixes ?? []).flatMap((entry) =>
+        entry.Prefix ? [entry.Prefix] : [],
+      ),
+      objects: (result.Contents ?? []).flatMap((object) =>
+        object.Key
+          ? [{
+              key: object.Key,
+              sizeBytes: BigInt(object.Size ?? 0),
+              ...(object.ETag ? { etag: object.ETag } : {}),
+              ...(object.LastModified ? { lastModified: object.LastModified } : {}),
+              ...(object.StorageClass ? { storageClass: object.StorageClass } : {}),
+            }]
+          : [],
+      ),
+      ...(result.IsTruncated && result.NextContinuationToken
+        ? { nextContinuationToken: result.NextContinuationToken }
+        : {}),
+    };
   }
 
   public async probeMultipart(bucketName: string): Promise<ProviderCapabilityResult> {

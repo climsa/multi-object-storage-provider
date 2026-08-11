@@ -31,6 +31,11 @@ data gateway described in [`project-docs/PLAN.md`](project-docs/PLAN.md).
   selection, per-target threshold checks, and in-flight reservation accounting.
 - Admin dashboard at the web root with memory-only access tokens, organization
   scope selection, provider/bucket/namespace views, and recent audit events.
+- Organization-scoped File Explorer at `/file-explorer` for object metadata
+  browsing, uploads, short-lived presigned downloads, and audited deletes. It
+  uses the user JWT plus `objects:list`, `objects:read`, `objects:write`, and
+  `objects:delete`; it does not expose provider credentials or API-credential
+  secrets.
 - Bounded cross-provider migration runs with pause/cancel controls, streaming copy,
   destination verification, atomic location switch, retry state, and audit logs.
 - Protected Prometheus-style metrics at `/metrics` when `MOSP_METRICS_TOKEN` is
@@ -88,6 +93,14 @@ is verified before its metadata becomes available.
 storage routes require an API credential, match its namespace, and enforce
 FolderGrant permissions.
 
+The admin File Explorer is a separate control-plane surface. Its
+`/v1/object-explorer/*` endpoints require the user JWT, `x-organization-id`,
+and the corresponding object permission. Every object query is tenant-scoped;
+download returns a short-lived presigned transfer, upload streams through the
+API with quota and placement checks, and delete uses a guarded state transition
+with an activity-log event. Folder creation uses a hidden marker object because
+S3-compatible storage represents folders as key prefixes.
+
 ## Local setup
 
 1. Put the connection string for your existing PostgreSQL instance in
@@ -129,6 +142,42 @@ the generated migration directory.
 organization, all known permissions, an Organization Owner role, and a scoped
 Platform Admin role for the local control-plane. It writes only the password
 hash to PostgreSQL and is intentionally not run automatically.
+
+Create a separate local super-admin account after the organization exists with:
+
+```bash
+npm run bootstrap:super-admin -- --generate-password
+```
+
+The command defaults to `superadmin@example.test`, grants Platform Admin plus
+Organization Owner for the only organization, and prints the generated password
+once. If multiple organizations exist, pass `--organization-slug <slug>`; use
+`--email <email>` to override the local-only default address.
+
+On macOS, the native local stack can be started without Docker with:
+
+```bash
+npm run dev:local:macos
+```
+
+The script reuses the existing PostgreSQL instance, applies checked-in
+migrations, ensures the Homebrew Redis service is available, starts MinIO on
+`127.0.0.1:9000`/console `9001`, and runs the API, worker, and web processes.
+MinIO credentials are requested interactively and are never written to an
+`.env` file. Press Ctrl-C to stop the API, worker, web, and MinIO processes;
+PostgreSQL and Redis remain managed by Homebrew.
+The local supervisor restarts only an API, worker, web, or script-managed
+MinIO process that exits; it does not restart healthy services.
+
+In local development, Next.js proxies `/v1/*` and `/storage/*` to
+`MOSP_API_ORIGIN` (default `http://127.0.0.1:4000`), so browser requests from
+port 3000 reach the API without requiring cross-origin cookies. Production does
+not use the loopback default; route the API through the deployment reverse
+proxy or set an explicit `MOSP_API_ORIGIN`.
+Because this is a same-origin proxy, browser developer tools will show the
+request URL as port 3000; Next forwards it server-side to port 4000. This is
+intentional and applies consistently to login, provider, bucket, namespace,
+credential, organization, migration, and storage requests.
 
 For a shared rate limiter, configure `MOSP_REDIS_URL`; the local Compose
 service uses `redis://127.0.0.1:6379`. Production startup fails closed when

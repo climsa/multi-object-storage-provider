@@ -36,6 +36,19 @@ function createBucketApp(permissions: string[]) {
       status: "ACTIVE",
       createdAt: "2030-01-01T00:00:00.000Z",
     }),
+    listObjects: vi.fn().mockResolvedValue({
+      bucket: { id: bucketId, name: "photos" },
+      folders: ["camera/"],
+      nextCursor: "next-cursor",
+      objects: [{
+        etag: "etag-1",
+        key: "readme.txt",
+        lastModified: "2030-01-01T00:00:00.000Z",
+        sizeBytes: "42",
+        storageClass: "STANDARD",
+      }],
+      prefix: "",
+    }),
     import: vi.fn().mockResolvedValue({
       id: bucketId,
       bucketName: "photos",
@@ -106,6 +119,34 @@ describe("bucket routes", () => {
     expect(response.status).toBe(200);
     expect(response.body.bucket.id).toBe(bucketId);
     expect(bucketService.get).toHaveBeenCalledWith(organizationId, bucketId);
+  });
+
+  it("lists raw bucket objects with the read permission and bounded query", async () => {
+    const { app, bucketService } = createBucketApp(["buckets:read"]);
+    const response = await request(app)
+      .get(`/v1/buckets/${bucketId}/objects`)
+      .query({ cursor: "current-cursor", limit: 25, prefix: "camera/" })
+      .set("Authorization", "Bearer access-token")
+      .set("x-organization-id", organizationId);
+
+    expect(response.status).toBe(200);
+    expect(response.body.listing.bucket.name).toBe("photos");
+    expect(bucketService.listObjects).toHaveBeenCalledWith(
+      organizationId,
+      bucketId,
+      { cursor: "current-cursor", limit: 25, prefix: "camera/" },
+    );
+  });
+
+  it("rejects raw bucket listing without the read permission", async () => {
+    const { app, bucketService } = createBucketApp(["buckets:import"]);
+    const response = await request(app)
+      .get(`/v1/buckets/${bucketId}/objects`)
+      .set("Authorization", "Bearer access-token")
+      .set("x-organization-id", organizationId);
+
+    expect(response.status).toBe(403);
+    expect(bucketService.listObjects).not.toHaveBeenCalled();
   });
 
   it("rejects bucket import without the import permission", async () => {

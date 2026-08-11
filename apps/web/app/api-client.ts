@@ -61,6 +61,38 @@ export interface PlatformSetting {
   updatedBy: { id: string; email: string } | null;
 }
 
+export interface ObjectExplorerNamespace {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+}
+
+export interface ObjectExplorerObject {
+  checksum: string | null;
+  contentType: string | null;
+  etag: string | null;
+  key: string;
+  modifiedAt: string;
+  sizeBytes: string;
+}
+
+export interface BucketBrowserObject {
+  etag: string | null;
+  key: string;
+  lastModified: string | null;
+  sizeBytes: string;
+  storageClass: string | null;
+}
+
+export interface BucketBrowserListing {
+  bucket: { id: string; name: string };
+  folders: string[];
+  nextCursor: string | null;
+  objects: BucketBrowserObject[];
+  prefix: string;
+}
+
 function csrfToken(): string | null {
   if (typeof document === "undefined") return null;
   const entry = document.cookie
@@ -196,6 +228,21 @@ export class DashboardApi {
     return result.bucket;
   }
 
+  public async listBucketObjects(
+    organizationId: string,
+    bucketConnectionId: string,
+    input: { cursor?: string; limit?: number; prefix?: string } = {},
+  ): Promise<BucketBrowserListing> {
+    const query = new URLSearchParams({ limit: String(input.limit ?? 100) });
+    if (input.prefix) query.set("prefix", input.prefix);
+    if (input.cursor) query.set("cursor", input.cursor);
+    const result = await this.request<{ listing: BucketBrowserListing }>(
+      `/v1/buckets/${encodeURIComponent(bucketConnectionId)}/objects?${query.toString()}`,
+      { headers: { "x-organization-id": organizationId } },
+    );
+    return result.listing;
+  }
+
   public async createNamespace(
     organizationId: string,
     input: Record<string, unknown>,
@@ -269,6 +316,103 @@ export class DashboardApi {
       headers: { "x-organization-id": organizationId },
       body: JSON.stringify({ action }),
     });
+  }
+
+  public async listExplorerNamespaces(organizationId: string): Promise<ObjectExplorerNamespace[]> {
+    const result = await this.request<{ namespaces: ObjectExplorerNamespace[] }>(
+      "/v1/object-explorer/namespaces",
+      { headers: { "x-organization-id": organizationId } },
+    );
+    return result.namespaces;
+  }
+
+  public async listExplorerObjects(
+    organizationId: string,
+    namespaceSlug: string,
+    prefix: string,
+    limit = 100,
+  ): Promise<ObjectExplorerObject[]> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (prefix) query.set("prefix", prefix);
+    const result = await this.request<{ objects: ObjectExplorerObject[] }>(
+      `/v1/object-explorer/${encodeURIComponent(namespaceSlug)}/objects?${query.toString()}`,
+      { headers: { "x-organization-id": organizationId } },
+    );
+    return result.objects;
+  }
+
+  public async listExplorerFolders(
+    organizationId: string,
+    namespaceSlug: string,
+    prefix: string,
+  ): Promise<string[]> {
+    const query = prefix ? `?prefix=${encodeURIComponent(prefix)}` : "";
+    const result = await this.request<{ folders: string[] }>(
+      `/v1/object-explorer/${encodeURIComponent(namespaceSlug)}/folders${query}`,
+      { headers: { "x-organization-id": organizationId } },
+    );
+    return result.folders;
+  }
+
+  public async createExplorerFolder(
+    organizationId: string,
+    namespaceSlug: string,
+    prefix: string,
+  ): Promise<string> {
+    const result = await this.request<{ folder: { prefix: string } }>(
+      `/v1/object-explorer/${encodeURIComponent(namespaceSlug)}/folders`,
+      {
+        method: "POST",
+        headers: { "x-organization-id": organizationId },
+        body: JSON.stringify({ prefix }),
+      },
+    );
+    return result.folder.prefix;
+  }
+
+  public async uploadExplorerObject(
+    organizationId: string,
+    namespaceSlug: string,
+    key: string,
+    file: File,
+  ): Promise<ObjectExplorerObject> {
+    const result = await this.request<{ object: ObjectExplorerObject }>(
+      `/v1/object-explorer/${encodeURIComponent(namespaceSlug)}/objects/${key.split("/").map(encodeURIComponent).join("/")}`,
+      {
+        method: "PUT",
+        headers: {
+          "x-organization-id": organizationId,
+          "x-mosp-content-length": String(file.size),
+          "x-mosp-object-content-type": file.type || "application/octet-stream",
+          "content-type": "application/octet-stream",
+        },
+        body: file,
+      },
+    );
+    return result.object;
+  }
+
+  public async downloadExplorerObject(
+    organizationId: string,
+    namespaceSlug: string,
+    key: string,
+  ): Promise<{ expiresAt: string; url: string }> {
+    const result = await this.request<{ transfer: { expiresAt: string; url: string } }>(
+      `/v1/object-explorer/${encodeURIComponent(namespaceSlug)}/download/${key.split("/").map(encodeURIComponent).join("/")}`,
+      { headers: { "x-organization-id": organizationId } },
+    );
+    return result.transfer;
+  }
+
+  public async deleteExplorerObject(
+    organizationId: string,
+    namespaceSlug: string,
+    key: string,
+  ): Promise<void> {
+    await this.request<void>(
+      `/v1/object-explorer/${encodeURIComponent(namespaceSlug)}/objects/${key.split("/").map(encodeURIComponent).join("/")}`,
+      { method: "DELETE", headers: { "x-organization-id": organizationId } },
+    );
   }
 
   private csrfHeaders(): Record<string, string> {

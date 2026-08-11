@@ -25,6 +25,7 @@ tags:
   - name: Folder grants
   - name: Migrations
   - name: Platform
+  - name: File Explorer
   - name: Storage
 paths:
   /healthz:
@@ -884,6 +885,50 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /v1/buckets/{bucketId}/objects:
+    parameters:
+      - $ref: '#/components/parameters/BucketId'
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+    get:
+      tags: [Buckets]
+      operationId: listBucketObjects
+      summary: List existing objects directly from an imported bucket.
+      description: Read-only provider listing that does not require or populate a namespace.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: prefix
+          in: query
+          schema: { type: string, maxLength: 2048, default: '' }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 8192 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        '200':
+          description: One provider-backed page of folders and objects.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listing]
+                properties:
+                  listing:
+                    $ref: '#/components/schemas/BucketObjectListing'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/ProviderFailure'
+
   /v1/namespaces:
     get:
       tags: [Namespaces]
@@ -1370,6 +1415,227 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/object-explorer/namespaces:
+    get:
+      tags: [File Explorer]
+      operationId: listExplorerNamespaces
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+      responses:
+        '200':
+          description: Active namespaces visible to the organization-scoped admin.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespaces]
+                properties:
+                  namespaces:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, slug, status]
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                        slug: { type: string }
+                        status: { type: string, const: ACTIVE }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/object-explorer/{namespace}/objects:
+    get:
+      tags: [File Explorer]
+      operationId: listExplorerObjects
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - $ref: '#/components/parameters/NamespaceSlug'
+        - name: prefix
+          in: query
+          schema: { type: string, maxLength: 2048 }
+        - name: limit
+          in: query
+          schema: { type: string, pattern: '^\\d{1,3}$', default: '100' }
+      responses:
+        '200':
+          description: Object metadata visible to an organization-scoped admin.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [objects]
+                properties:
+                  objects:
+                    type: array
+                    items: { $ref: '#/components/schemas/ObjectSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/object-explorer/{namespace}/folders:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationIdHeader'
+      - $ref: '#/components/parameters/NamespaceSlug'
+    get:
+      tags: [File Explorer]
+      operationId: listExplorerFolders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: prefix
+          in: query
+          schema: { type: string, maxLength: 2047 }
+      responses:
+        '200':
+          description: Folder prefixes represented by internal markers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [folders]
+                properties:
+                  folders:
+                    type: array
+                    items: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      tags: [File Explorer]
+      operationId: createExplorerFolder
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix]
+              additionalProperties: false
+              properties:
+                prefix: { type: string, minLength: 1, maxLength: 2047 }
+      responses:
+        '201':
+          description: Folder prefix created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [folder]
+                properties:
+                  folder:
+                    type: object
+                    required: [prefix]
+                    properties:
+                      prefix: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '502': { $ref: '#/components/responses/ProviderFailure' }
+        '503': { $ref: '#/components/responses/ProviderFailure' }
+  /v1/object-explorer/{namespace}/download/{key}:
+    get:
+      tags: [File Explorer]
+      operationId: createExplorerDownload
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - $ref: '#/components/parameters/NamespaceSlug'
+        - name: key
+          in: path
+          required: true
+          allowReserved: true
+          description: Logical object key; slash-separated keys are accepted.
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        '200':
+          description: Short-lived provider URL for the selected object.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transfer]
+                properties:
+                  transfer:
+                    type: object
+                    required: [url, expiresAt]
+                    properties:
+                      url: { type: string, format: uri }
+                      expiresAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '502': { $ref: '#/components/responses/ProviderFailure' }
+  /v1/object-explorer/{namespace}/objects/{key}:
+    put:
+      tags: [File Explorer]
+      operationId: uploadExplorerObject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - $ref: '#/components/parameters/NamespaceSlug'
+        - name: key
+          in: path
+          required: true
+          allowReserved: true
+          description: Logical object key; slash-separated keys are accepted.
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+          '*/*':
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: Uploaded object metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object]
+                properties:
+                  object: { $ref: '#/components/schemas/ObjectSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '411': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '502': { $ref: '#/components/responses/ProviderFailure' }
+        '503': { $ref: '#/components/responses/ProviderFailure' }
+    delete:
+      tags: [File Explorer]
+      operationId: deleteExplorerObject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrganizationIdHeader'
+        - $ref: '#/components/parameters/NamespaceSlug'
+        - name: key
+          in: path
+          required: true
+          allowReserved: true
+          description: Logical object key; slash-separated keys are accepted.
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        '204': { description: Object deletion completed. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '502': { $ref: '#/components/responses/ProviderFailure' }
 
   /storage/v1/{namespace}/objects:
     get:
@@ -2014,6 +2280,33 @@ components:
         providerConnectionId: { type: string, format: uuid }
         status: { type: string }
         createdAt: { type: string, format: date-time }
+    BucketObject:
+      type: object
+      required: [key, sizeBytes, lastModified, etag, storageClass]
+      properties:
+        key: { type: string }
+        sizeBytes: { $ref: '#/components/schemas/BigIntString' }
+        lastModified: { type: string, format: date-time, nullable: true }
+        etag: { type: string, nullable: true }
+        storageClass: { type: string, nullable: true }
+    BucketObjectListing:
+      type: object
+      required: [bucket, folders, nextCursor, objects, prefix]
+      properties:
+        bucket:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        folders:
+          type: array
+          items: { type: string }
+        nextCursor: { type: string, nullable: true }
+        objects:
+          type: array
+          items: { $ref: '#/components/schemas/BucketObject' }
+        prefix: { type: string }
     BigIntString:
       type: string
       pattern: '^\d+$'

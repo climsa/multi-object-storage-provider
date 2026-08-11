@@ -13,6 +13,7 @@ import { createMigrationRouter, type MigrationRouteDependencies } from "./migrat
 import { requestIdFromHeader } from "./security/request-id.js";
 import { MetricsRegistry, metricsTokenMatches } from "./observability/metrics.js";
 import { createPlatformRouter, type PlatformRouteDependencies } from "./platform/routes.js";
+import { createObjectExplorerRouter, type ObjectExplorerRouteDependencies } from "./object-explorer/routes.js";
 
 export interface AppDependencies {
   auth?: AuthRouteDependencies;
@@ -25,12 +26,13 @@ export interface AppDependencies {
   namespaces?: NamespaceRouteDependencies;
   migrations?: MigrationRouteDependencies;
   platform?: PlatformRouteDependencies;
+  objectExplorer?: ObjectExplorerRouteDependencies;
   readinessCheck?: () => Promise<void>;
   trustProxy?: false | number;
   metricsToken?: string;
 }
 
-export function createApp({ auth, apiCredentials, buckets, folderGrants, metricsToken, migrations, namespaces, organizations, platform, providers, readinessCheck, storage, trustProxy }: AppDependencies = {}) {
+export function createApp({ auth, apiCredentials, buckets, folderGrants, metricsToken, migrations, namespaces, objectExplorer, organizations, platform, providers, readinessCheck, storage, trustProxy }: AppDependencies = {}) {
   const app = express();
   const metrics = new MetricsRegistry();
 
@@ -89,6 +91,10 @@ export function createApp({ auth, apiCredentials, buckets, folderGrants, metrics
 
   if (storage) {
     app.use("/storage/v1", createStorageRouter({ ...storage, metrics }));
+  }
+
+  if (objectExplorer) {
+    app.use("/v1/object-explorer", createObjectExplorerRouter(objectExplorer));
   }
 
   if (providers) {

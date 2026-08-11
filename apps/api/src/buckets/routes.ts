@@ -17,6 +17,7 @@ import {
 import {
   BucketConnectionAccessError,
   BucketConnectionMustBeDisabled,
+  BucketConnectionNotActive,
   BucketConnectionNotFound,
   BucketConnectionService,
 } from "./service.js";
@@ -53,6 +54,12 @@ function bucketConnectionId(request: Request): string | null {
   return parsed.success ? parsed.data : null;
 }
 
+const bucketObjectListQuerySchema = z.object({
+  cursor: z.string().min(1).max(8_192).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(100),
+  prefix: z.string().max(2_048).regex(/^[^\u0000-\u001f\u007f]*$/).default(""),
+}).strict();
+
 function sendBucketError(response: Response, error: unknown) {
   if (error instanceof ZodError) {
     response.status(400).json({ error: "invalid_bucket_request" });
@@ -72,6 +79,10 @@ function sendBucketError(response: Response, error: unknown) {
   }
   if (error instanceof BucketConnectionMustBeDisabled) {
     response.status(409).json({ error: "bucket_must_be_disabled" });
+    return;
+  }
+  if (error instanceof BucketConnectionNotActive) {
+    response.status(409).json({ error: "bucket_not_active" });
     return;
   }
   if (error instanceof Error && error.message === "UNAUTHENTICATED") {
@@ -136,6 +147,40 @@ export function createBucketRouter(dependencies: BucketRouteDependencies) {
       }
       response.json({
         bucket: await dependencies.bucketService.get(context.organizationId, id),
+      });
+    } catch (error) {
+      sendBucketError(response, error);
+    }
+  });
+
+  router.get("/:bucketId/objects", async (request: Request, response: Response) => {
+    try {
+      const context = await authorize(request, dependencies, "buckets:read");
+      const id = bucketConnectionId(request);
+      if (!id) {
+        response.status(400).json({ error: "invalid_bucket_request" });
+        return;
+      }
+      if (
+        await rejectWhenLimited(
+          response,
+          dependencies.rateLimiter,
+          rateLimitKey(request.ip, `bucket-objects:${context.organizationId}:${id}`),
+        )
+      ) {
+        return;
+      }
+      const query = bucketObjectListQuerySchema.parse(request.query);
+      response.json({
+        listing: await dependencies.bucketService.listObjects(
+          context.organizationId,
+          id,
+          {
+            limit: query.limit,
+            prefix: query.prefix,
+            ...(query.cursor ? { cursor: query.cursor } : {}),
+          },
+        ),
       });
     } catch (error) {
       sendBucketError(response, error);

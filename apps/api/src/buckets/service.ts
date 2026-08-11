@@ -21,9 +21,30 @@ export interface BucketConnectionSummary {
   status: string;
 }
 
+export interface BucketObjectListInput {
+  cursor?: string;
+  limit: number;
+  prefix: string;
+}
+
+export interface BucketObjectListResult {
+  bucket: { id: string; name: string };
+  folders: string[];
+  nextCursor: string | null;
+  objects: Array<{
+    etag: string | null;
+    key: string;
+    lastModified: string | null;
+    sizeBytes: string;
+    storageClass: string | null;
+  }>;
+  prefix: string;
+}
+
 export class BucketConnectionAccessError extends Error {}
 export class BucketConnectionNotFound extends Error {}
 export class BucketConnectionMustBeDisabled extends Error {}
+export class BucketConnectionNotActive extends Error {}
 
 export class BucketConnectionService {
   public constructor(
@@ -72,6 +93,53 @@ export class BucketConnectionService {
     });
     if (!bucket) throw new BucketConnectionNotFound();
     return this.toSummary(bucket);
+  }
+
+  public async listObjects(
+    organizationId: string,
+    bucketConnectionId: string,
+    input: BucketObjectListInput,
+  ): Promise<BucketObjectListResult> {
+    const bucket = await this.database.bucketConnection.findFirst({
+      where: { id: bucketConnectionId, organizationId },
+      select: {
+        bucketName: true,
+        id: true,
+        providerConnectionId: true,
+        status: true,
+      },
+    });
+    if (!bucket) throw new BucketConnectionNotFound();
+    if (bucket.status !== "ACTIVE") throw new BucketConnectionNotActive();
+
+    const adapter = await this.providerService.adapterFor(
+      organizationId,
+      bucket.providerConnectionId,
+    );
+    try {
+      const listed = await adapter.listObjects(bucket.bucketName, {
+        delimiter: "/",
+        maxKeys: input.limit,
+        prefix: input.prefix,
+        ...(input.cursor ? { continuationToken: input.cursor } : {}),
+      });
+      return {
+        bucket: { id: bucket.id, name: bucket.bucketName },
+        folders: listed.commonPrefixes,
+        nextCursor: listed.nextContinuationToken ?? null,
+        objects: listed.objects.map((object) => ({
+          etag: object.etag ?? null,
+          key: object.key,
+          lastModified: object.lastModified?.toISOString() ?? null,
+          sizeBytes: object.sizeBytes.toString(),
+          storageClass: object.storageClass ?? null,
+        })),
+        prefix: input.prefix,
+      };
+    } catch (error) {
+      if (error instanceof RangeError) throw error;
+      throw new BucketConnectionAccessError("BUCKET_OBJECT_LIST_FAILED");
+    }
   }
 
   public async updateStatus(
@@ -150,7 +218,7 @@ export class BucketConnectionService {
     );
 
     try {
-      await adapter.testConnection(input.bucketName);
+      await adapter.testBucketAccess(input.bucketName);
     } catch {
       throw new BucketConnectionAccessError("BUCKET_ACCESS_FAILED");
     }

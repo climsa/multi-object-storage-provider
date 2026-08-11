@@ -27,6 +27,7 @@ import { PlacementService } from "./storage/placement-service.js";
 import { MigrationService } from "./migrations/service.js";
 import { UsageService } from "./usage/service.js";
 import { PlatformService } from "./platform/service.js";
+import { ObjectExplorerService } from "./object-explorer/service.js";
 import {
   createProxyTransferConfig,
   DEFAULT_PROXY_TRANSFER_CONFIG,
@@ -179,6 +180,13 @@ const objectIndexService = new ObjectIndexService(
   proxyTransferConfig,
 );
 const placementService = new PlacementService(database);
+const objectExplorerService = new ObjectExplorerService(
+  database,
+  providerService,
+  usageService,
+  placementService,
+  proxyTransferConfig,
+);
 const uploadService = new UploadService(
   database,
   folderGrantService,
@@ -246,6 +254,12 @@ const app = createApp({
     inFlightLimiter: storageInFlightLimiter,
     usageService,
     proxyTransferConfig,
+  },
+  objectExplorer: {
+    authService,
+    organizationAccess,
+    objectExplorerService,
+    rateLimiter: storageRateLimiter,
   },
   providers: {
     authService,

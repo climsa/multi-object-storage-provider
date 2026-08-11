@@ -10,6 +10,12 @@ packages/db/generated/
 .local/secrets/*
 !.local/secrets/README.md
 .local/minio-data/
+.local/logs/*
+.local/run/*
+
+# Next.js writes these local agent hints when running `next dev`.
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
 
 # Local tooling
 .DS_Store

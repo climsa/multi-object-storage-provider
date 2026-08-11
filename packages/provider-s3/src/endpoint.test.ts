@@ -25,6 +25,16 @@ describe("assertSafeProviderEndpoint", () => {
     ).resolves.toBeInstanceOf(URL);
   });
 
+  it("allows HTTPS alongside the local MinIO port when both are allowlisted", async () => {
+    await expect(
+      assertSafeProviderEndpoint("https://127.0.0.1", {
+        allowHttp: true,
+        allowPrivateNetwork: true,
+        allowedPorts: [80, 443, 9000],
+      }),
+    ).resolves.toBeInstanceOf(URL);
+  });
+
   it("rejects ports outside the explicit allowlist", async () => {
     await expect(
       assertSafeProviderEndpoint("https://storage.example.com:8443", {
